@@ -92,8 +92,9 @@ class ActivityPanel extends StatelessWidget {
                                   itemCount: activities.length,
                                   separatorBuilder: (_, _) =>
                                       const SizedBox(height: 7),
-                                  itemBuilder: (_, index) =>
-                                      _ActivityTile(activity: activities[index]),
+                                  itemBuilder: (_, index) => _ActivityTile(
+                                    activity: activities[index],
+                                  ),
                                 ),
                         ),
                         const SizedBox(height: 14),
@@ -202,7 +203,10 @@ class _SessionTile extends StatelessWidget {
             Container(
               width: 7,
               height: 7,
-              decoration: const BoxDecoration(color: coral, shape: BoxShape.circle),
+              decoration: const BoxDecoration(
+                color: coral,
+                shape: BoxShape.circle,
+              ),
             ),
         ],
       ),
@@ -226,26 +230,6 @@ class ActivityRail extends StatelessWidget {
           child: Column(
             children: [
               const SizedBox(height: 12),
-              IconButton(
-                key: const Key('expand-panel-button'),
-                tooltip: 'Expandir painel',
-                onPressed: onExpand,
-                icon: const Icon(
-                  Icons.menu_rounded,
-                  color: Colors.white70,
-                  size: 19,
-                ),
-              ),
-              const SizedBox(height: 10),
-              _RailIcon(
-                key: const Key('rail-activity-button'),
-                icon: Icons.monitor_heart_outlined,
-                badge: idle.activities.isEmpty
-                    ? null
-                    : '${idle.activities.length}',
-                onTap: onExpand,
-              ),
-              const SizedBox(height: 8),
               BlocBuilder<WorkspaceCubit, WorkspaceState>(
                 builder: (context, workspaceState) {
                   final sessions = workspaceState is WorkspaceReady
@@ -254,7 +238,7 @@ class ActivityRail extends StatelessWidget {
                   final currentSession = idle.currentSessionSummary;
                   return _RailIcon(
                     key: const Key('rail-sessions-button'),
-                    icon: Icons.history_rounded,
+                    icon: Icons.menu,
                     badge: (sessions.isNotEmpty || currentSession != null)
                         ? '${sessions.length + (currentSession != null ? 1 : 0)}'
                         : null,
@@ -271,7 +255,12 @@ class ActivityRail extends StatelessWidget {
 }
 
 class _RailIcon extends StatelessWidget {
-  const _RailIcon({super.key, required this.icon, required this.onTap, this.badge});
+  const _RailIcon({
+    super.key,
+    required this.icon,
+    required this.onTap,
+    this.badge,
+  });
 
   final IconData icon;
   final VoidCallback onTap;
@@ -293,7 +282,10 @@ class _RailIcon extends StatelessWidget {
                 right: -12,
                 top: -8,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: coral,
                     borderRadius: BorderRadius.circular(99),
@@ -340,8 +332,16 @@ class _ActivityTile extends StatelessWidget {
 
   ({String badge, String title, Color color}) get _style =>
       switch (activity.call.name) {
-        'read_file' => (badge: 'R', title: 'Leitura', color: const Color(0xFF74C9D3)),
-        'write_file' => (badge: 'W', title: 'Gravação', color: const Color(0xFF7BD8B0)),
+        'read_file' => (
+          badge: 'R',
+          title: 'Leitura',
+          color: const Color(0xFF74C9D3),
+        ),
+        'write_file' => (
+          badge: 'W',
+          title: 'Gravação',
+          color: const Color(0xFF7BD8B0),
+        ),
         'replace_in_file' => (
           badge: 'E',
           title: 'Edição',

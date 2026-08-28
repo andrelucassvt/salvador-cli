@@ -63,11 +63,7 @@ class _LogoMark extends StatelessWidget {
           width: 28,
           height: 28,
           decoration: const BoxDecoration(color: coral, shape: BoxShape.circle),
-          child: const Icon(
-            Icons.chevron_right_rounded,
-            color: Colors.white,
-            size: 21,
-          ),
+          child: const Icon(Icons.code, color: Colors.white, size: 21),
         ),
         const SizedBox(width: 8),
         LayoutBuilder(
@@ -114,13 +110,22 @@ class WorkspaceTopBar extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  if (!compact) ...[const _LogoMark(), const SizedBox(width: 10)],
+                  if (!compact) ...[
+                    const _LogoMark(),
+                    const SizedBox(width: 10),
+                  ],
                   Expanded(
-                    child: FolderMenu(state: workspaceState, cubit: workspaceCubit),
+                    child: FolderMenu(
+                      state: workspaceState,
+                      cubit: workspaceCubit,
+                    ),
                   ),
                   const SizedBox(width: 6),
                   Expanded(
-                    child: ModelMenu(state: workspaceState, cubit: workspaceCubit),
+                    child: ModelMenu(
+                      state: workspaceState,
+                      cubit: workspaceCubit,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   StartStopButton(
@@ -134,15 +139,19 @@ class WorkspaceTopBar extends StatelessWidget {
                       final chatCubit = context.read<ChatCubit>();
                       final messages = (chatState as ChatIdle).messages;
                       void onNewSession() => chatCubit.newSession(
-                        onSessionEnded: (PersistedSessionSummaryEntity summary) =>
-                            workspaceCubit.recordSession(summary),
+                        onSessionEnded:
+                            (PersistedSessionSummaryEntity summary) =>
+                                workspaceCubit.recordSession(summary),
                       );
                       if (veryCompact) {
                         return IconButton(
                           key: const Key('new-session-button'),
                           tooltip: 'Nova sessão',
                           onPressed: messages.isEmpty ? null : onNewSession,
-                          icon: const Icon(Icons.add_comment_outlined, size: 18),
+                          icon: const Icon(
+                            Icons.add_comment_outlined,
+                            size: 18,
+                          ),
                         );
                       }
                       return TextButton.icon(

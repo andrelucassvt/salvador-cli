@@ -242,24 +242,10 @@ class FilesRail extends StatelessWidget {
         children: [
           const SizedBox(height: 12),
           IconButton(
-            key: const Key('expand-files-panel-button'),
-            tooltip: 'Expandir painel de arquivos',
-            onPressed: onExpand,
-            icon: const Icon(Icons.chevron_left_rounded, color: muted, size: 20),
-          ),
-          const SizedBox(height: 10),
-          IconButton(
             key: const Key('right-rail-files-button'),
             tooltip: 'Arquivos',
             onPressed: onExpand,
             icon: const Icon(Icons.folder_outlined, color: muted, size: 18),
-          ),
-          const SizedBox(height: 8),
-          IconButton(
-            key: const Key('right-rail-search-button'),
-            tooltip: 'Buscar arquivos',
-            onPressed: onExpand,
-            icon: const Icon(Icons.search_rounded, color: muted, size: 18),
           ),
         ],
       ),

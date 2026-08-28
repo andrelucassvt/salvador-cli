@@ -104,50 +104,43 @@ class Composer extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SizedBox(
-                      height: 62,
-                      child: Focus(
-                        onKeyEvent: (_, event) {
-                          if (event is KeyDownEvent &&
-                              event.logicalKey == LogicalKeyboardKey.enter &&
-                              !HardwareKeyboard.instance.isShiftPressed) {
-                            if (sending || !ready) {
-                              return KeyEventResult.handled;
-                            }
-                            onSend();
+                    Focus(
+                      onKeyEvent: (_, event) {
+                        if (event is KeyDownEvent &&
+                            event.logicalKey == LogicalKeyboardKey.enter &&
+                            !HardwareKeyboard.instance.isShiftPressed) {
+                          if (sending || !ready) {
                             return KeyEventResult.handled;
                           }
-                          return KeyEventResult.ignored;
-                        },
-                        child: TextField(
-                          key: const Key('composer-field'),
-                          controller: controller,
-                          focusNode: focusNode,
-                          expands: true,
-                          maxLines: null,
-                          minLines: null,
-                          textAlignVertical: TextAlignVertical.top,
-                          enabled: !sending,
-                          style: const TextStyle(
-                            color: ink,
-                            fontSize: 14,
-                            height: 1.45,
-                          ),
-                          decoration: InputDecoration.collapsed(
-                            hintText: ready
-                                ? 'Peça uma alteração ou mencione um arquivo com @…'
-                                : 'Conecte ao Ollama e inicie o modelo para começar…',
-                            hintStyle: const TextStyle(color: muted),
-                          ),
+                          onSend();
+                          return KeyEventResult.handled;
+                        }
+                        return KeyEventResult.ignored;
+                      },
+                      child: TextField(
+                        key: const Key('composer-field'),
+                        controller: controller,
+                        focusNode: focusNode,
+                        minLines: 1,
+                        maxLines: 10,
+                        textAlignVertical: TextAlignVertical.center,
+                        enabled: !sending,
+                        style: const TextStyle(color: ink, fontSize: 14),
+                        decoration: InputDecoration(
+                          hintText: ready
+                              ? 'Peça uma alteração ou mencione um arquivo com @…'
+                              : 'Conecte ao Ollama e inicie o modelo para começar…',
+                          hintStyle: const TextStyle(color: muted),
                         ),
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Wrap(
-                      alignment: WrapAlignment.spaceBetween,
-                      crossAxisAlignment: WrapCrossAlignment.center,
+                    Row(
+                      // alignment: WrapAlignment.spaceBetween,
+                      // crossAxisAlignment: WrapCrossAlignment.center,
                       spacing: 12,
-                      runSpacing: 8,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      //runSpacing: 8,
                       children: [
                         TextButton.icon(
                           onPressed: sending ? null : onMention,
@@ -157,30 +150,35 @@ class Composer extends StatelessWidget {
                           ),
                           label: const Text('Arquivo'),
                         ),
-                        const Text(
-                          'Enter para enviar · Shift+Enter para quebrar linha',
-                          style: TextStyle(color: muted, fontSize: 10),
-                        ),
-                        FilledButton(
-                          key: const Key('send-button'),
-                          onPressed: sending || !ready ? null : onSend,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: ocean,
-                            minimumSize: const Size(46, 40),
-                            padding: EdgeInsets.zero,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(11),
+                        Row(
+                          spacing: 10,
+                          children: [
+                            const Text(
+                              'Enter para enviar · Shift+Enter para quebrar linha',
+                              style: TextStyle(color: muted, fontSize: 10),
                             ),
-                          ),
-                          child: sending
-                              ? const SizedBox.square(
-                                  dimension: 17,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.arrow_upward_rounded),
+                            FilledButton(
+                              key: const Key('send-button'),
+                              onPressed: sending || !ready ? null : onSend,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: ocean,
+                                minimumSize: const Size(46, 40),
+                                padding: EdgeInsets.zero,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(11),
+                                ),
+                              ),
+                              child: sending
+                                  ? const SizedBox.square(
+                                      dimension: 17,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.arrow_upward_rounded),
+                            ),
+                          ],
                         ),
                       ],
                     ),
