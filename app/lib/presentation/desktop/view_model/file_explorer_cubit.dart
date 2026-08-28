@@ -120,8 +120,7 @@ class FileExplorerCubit extends Cubit<FileExplorerState> {
   }
 
   /// Insere a mencao do arquivo em preview na posicao do cursor, reutilizando
-  /// a codificacao com aspas para caminhos com espaco - porta
-  /// `desktop_controller.dart:800-816`.
+  /// a codificacao com aspas para caminhos com espaco.
   String mentionPreviewedFile(String input, int cursor) {
     final path = (state as FileExplorerLoaded).preview?.path;
     if (path == null) return input;

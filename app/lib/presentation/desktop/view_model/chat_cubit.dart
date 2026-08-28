@@ -21,9 +21,7 @@ class ChatCubit extends Cubit<ChatState> {
   bool _ready = false;
 
   /// Chamado pela View a cada mudanca de `WorkspaceState` (conectado +
-  /// modelo em execucao) - substitui a checagem
-  /// `connectionState == ready && modelState == running` de
-  /// `desktop_controller.dart:544-554`.
+  /// modelo em execucao).
   void updateReadiness(bool ready) => _ready = ready;
 
   void attachSession({
@@ -97,8 +95,7 @@ class ChatCubit extends Cubit<ChatState> {
 
   /// Encerra a sessao em andamento: reporta o resumo (se houver primeiro
   /// prompt) via callback para quem persiste (`WorkspaceCubit`, na View) e
-  /// limpa mensagens/atividades - porta `newSession()` de
-  /// `desktop_controller.dart:479-496`.
+  /// limpa mensagens/atividades.
   void newSession({
     required void Function(PersistedSessionSummaryEntity summary)
     onSessionEnded,

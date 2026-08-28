@@ -12,6 +12,8 @@ import 'package:salvador_desktop/domain/interfaces/ollama_repository.dart';
 import 'package:salvador_desktop/domain/interfaces/workspace_repository.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/chat_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/file_explorer_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/settings_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/settings_state.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/workspace_cubit.dart';
 
 /// Service locator unico do app. Populado incrementalmente pelas partes
@@ -61,6 +63,13 @@ class AppInjector {
     );
     inject.registerFactory<FileExplorerCubit>(
       () => FileExplorerCubit(inject<WorkspaceRepository>()),
+    );
+    // Recebe o estado inicial do formulario como parametro: depende dos
+    // valores atuais do WorkspaceState no momento em que o dialogo abre,
+    // que nao existem em tempo de registro.
+    inject.registerFactoryParam<SettingsCubit, SettingsEditing, void>(
+      (initial, _) =>
+          SettingsCubit(inject<OllamaRepository>(), initial: initial),
     );
   }
 }

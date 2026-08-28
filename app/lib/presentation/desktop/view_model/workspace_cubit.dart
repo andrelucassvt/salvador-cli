@@ -169,8 +169,7 @@ class WorkspaceCubit extends Cubit<WorkspaceState> {
       case Error(:final error):
         // O servidor nao confirmou o unload: deriva o estado do ultimo
         // `runningModels` conhecido (ainda contem o modelo), em vez de
-        // assumir "parado" as cegas - porta `_updateModelState()` de
-        // `desktop_controller.dart:365-369`.
+        // assumir "parado" as cegas.
         final ready = state as WorkspaceReady;
         final stillRunning = ready.runningModels.any(
           (running) => running.name == ready.selectedModel,

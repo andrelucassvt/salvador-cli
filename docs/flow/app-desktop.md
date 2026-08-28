@@ -1,93 +1,125 @@
 ---
 generated_at: 2026-08-28
-source_commit: 9c08a3d
+source_commit: pendente (migração para Clean Architecture)
 source_state: clean
 verified_at: 2026-08-28
 status: current
-related_plans: ['docs/plan/salvador-desktop-redesign/00-indice.md']
+related_plans: ['docs/plan/salvador-desktop-clean-architecture/00-indice.md']
 ---
 
 # Flow: App Desktop do Salvador
 
-> **Resumo:** Caminho ponta a ponta do app Flutter desktop: restauração do estado persistido, conexão HTTP com o Ollama (`/api/tags` + `/api/ps`), carga/descarga do modelo pela top bar, conversa com o agente com permissões configuráveis, registro de atividade/sessões no painel esquerdo e árvore de arquivos com preview seguro à direita — tudo persistido em JSON versionado no diretório de dados do sistema operacional.
+> **Resumo:** Caminho ponta a ponta do app Flutter desktop: bootstrap do `AppInjector` (GetIt), restauração do estado persistido pelo `WorkspaceCubit`, conexão HTTP com o Ollama (`/api/tags` + `/api/ps`), carga/descarga do modelo pela top bar, conversa com o agente via `ChatCubit` com permissões configuráveis, registro de atividade/sessões no painel esquerdo e árvore de arquivos com preview seguro à direita via `FileExplorerCubit` — tudo persistido em JSON versionado no diretório de dados do sistema operacional.
 
 ## Visão Geral
 
-O desktop é um shell em torno do mesmo `AgentSession` da CLI, com estado próprio no `DesktopController` (`ChangeNotifier`). Na inicialização, o controlador restaura preferências, pasta, modelo, parâmetros de inferência, permissões, pastas recentes e resumos de sessões de um JSON versionado gravado no diretório de dados do SO (`Application Support` no macOS, `APPDATA` no Windows, `XDG_CONFIG_HOME`/`.config` no Linux). Em seguida, conecta ao servidor por HTTP — sem usar o binário `ollama` — consultando `/api/tags` e `/api/ps` para separar "servidor conectado" de "modelo carregado".
+O desktop segue Clean Architecture (Presentation → Domain ← Data) com injeção de dependências via GetIt (`AppInjector`). Quatro Cubits dividem a responsabilidade que antes vivia inteira em um único `DesktopController` (`ChangeNotifier`, removido nesta migração):
+
+- **`WorkspaceCubit`** — coordenador: conexão com o Ollama, seleção/ciclo de vida do modelo, pasta raiz, parâmetros de inferência, permissões e histórico de sessões persistidas. Concentra essas responsabilidades porque `DesktopPreferencesEntity` é lida/gravada como uma unidade só.
+- **`ChatCubit`** — mensagens, atividades de ferramentas emitidas pelo agente e envio.
+- **`FileExplorerCubit`** — árvore de arquivos, filtro, preview e sugestões de menção `@arquivo`.
+- **`SettingsCubit`** — estado local do formulário do diálogo de configurações (criado sob demanda, via `registerFactoryParam`, com os valores atuais do `WorkspaceState`).
+
+Nenhum Cubit referencia outro diretamente: a sincronização entre eles acontece na View (`_ShellScreenState`, em `salvador_desktop_app.dart`), via `MultiBlocListener` — quando `WorkspaceCubit` emite uma nova raiz/modelo/permissões, a View aciona `FileExplorerCubit.setRoot(...)` e `ChatCubit.attachSession(...)`; quando `ChatCubit.newSession()` encerra uma sessão, ela recebe um callback (não uma referência a Cubit) que a View liga a `WorkspaceCubit.recordSession(...)`.
+
+Na inicialização, `main.dart` chama `AppInjector.setupDependencies()` antes de `runApp`. O `WorkspaceCubit` restaura preferências, pasta, modelo, parâmetros de inferência, permissões, pastas recentes e resumos de sessões de um JSON versionado gravado no diretório de dados do SO (`Application Support` no macOS, `APPDATA` no Windows, `XDG_CONFIG_HOME`/`.config` no Linux). Em seguida, conecta ao servidor por HTTP — sem usar o binário `ollama` — consultando `/api/tags` e `/api/ps` para separar "servidor conectado" de "modelo carregado".
 
 O shell tem quatro regiões: title bar customizada de 38 px no macOS, top bar de 62 px (logo, pasta, modelo, iniciar/encerrar, nova sessão, configurações), painel esquerdo escuro de atividade/sessões com rail de 50 px, e painel direito claro de árvore de arquivos com rail de 50 px. A área central alterna entre chat/estado vazio e o preview de arquivo. Tudo o que pode falhar (troca de pasta, de modelo, salvar configurações, testar servidor) só persiste após sucesso; o modelo é carregado antes de qualquer envio ao agente.
 
 ## Passo a Passo
 
 1. **Bootstrap** — `app/lib/main.dart` → `main`
-   `WidgetsFlutterBinding.ensureInitialized()`; no macOS, inicializa o `window_manager` com `TitleBarStyle.hidden` (a janela fica sem title bar nativa e o app desenha a própria de 38 px). `runApp(SalvadorDesktopApp())`.
+   `WidgetsFlutterBinding.ensureInitialized()`; `await AppInjector.setupDependencies()` registra services → datasources → repositories → cubits no GetIt. No macOS, inicializa o `window_manager` com `TitleBarStyle.hidden` (a janela fica sem title bar nativa e o app desenha a própria de 38 px). `runApp(const SalvadorDesktopApp())`.
 
 2. **Montagem do shell** — `app/lib/src/desktop/salvador_desktop_app.dart` → `SalvadorDesktopApp` / `_ShellScreenState.initState`
-   Cria (ou recebe injetado, nos testes) o `DesktopController`, registra listener e, se dono do controlador, agenda `initialize()` no primeiro frame.
+   Resolve `WorkspaceCubit`, `ChatCubit` e `FileExplorerCubit` via `AppInjector.inject<...>()`, registra os `MultiBlocListener`s de sincronização entre eles e agenda `_workspaceCubit.initialize()` no primeiro frame.
 
-3. **Restauração do estado** — `app/lib/src/desktop/desktop_controller.dart` → `DesktopController.initialize`
-   Lê `DesktopStateStore.load()` (JSON versionado, leitura defensiva devolve defaults em arquivo ausente/corrompido/versão desconhecida) e aplica host, modelo, `InferenceOptions`, `AgentPermissions`, raiz ativa, recentes e sessões; valida a raiz no disco e reconstrói menções, ferramentas de preview e árvore via `_resetWorkspaceContext()`.
+3. **Restauração do estado** — `app/lib/presentation/desktop/view_model/workspace_cubit.dart` → `WorkspaceCubit.initialize`
+   Lê `DesktopStorageService.load()` (JSON versionado, leitura defensiva devolve defaults em arquivo ausente/corrompido/versão desconhecida) e aplica host, modelo, `InferenceOptions`, `AgentPermissions`, raiz ativa, recentes e sessões; valida a raiz no disco e chama `_connect()`.
 
-4. **Conexão com o Ollama** — `desktop_controller.dart` → `_performConnect`
-   Cria o `OllamaClient` pela factory injetável (modelo atual, host, opções de inferência), chama `testConnection()` (`/api/version`), `listModels()` (`/api/tags`) e `listRunningModels(installed: …)` (`/api/ps`); sem modelos instalados, falha com mensagem de `ollama pull`. Seleciona o primeiro modelo se o persistido não existir, reconstrói a sessão do agente e deriva `modelState` (parado/carregado) dos modelos em `/api/ps`.
+4. **Conexão com o Ollama** — `workspace_cubit.dart` → `_connect`
+   Chama `OllamaRepository.testConnection`/`listModels`/`listRunningModels` (implementados em `data/repositories/ollama_repository_impl.dart`, que encapsula `OllamaClient` via `data/datasources/ollama_remote_datasource.dart`); sem modelos instalados, emite `WorkspaceErrorKind.noModelsInstalled`. Seleciona o primeiro modelo se o persistido não existir e deriva `modelState` (parado/carregado) dos modelos em `/api/ps`.
 
-5. **Interações da top bar** — `salvador_desktop_app.dart` → `_WorkspaceTopBar` / `_FolderMenu` / `_ModelMenu` / `_StartStopButton`
-   Pasta: menu lista `recentRoots` com marca da ativa e `file_selector.getDirectoryPath` para o picker nativo; seleção chama `selectRoot`, que valida a pasta, deduplica recentes, persiste e reindexa a árvore. Modelo: menu mostra status, tamanho, quantização e contexto (`fetchModelContext` → `/api/show`); seleção chama `selectModel`, que carrega o modelo (`loadModel` → `/api/generate` com prompt vazio), persiste a escolha e reconstrói a sessão. Iniciar/encerrar chama `startModel`/`stopModel` (mesma via `loadModel`/`unloadModel`, com `keep_alive`), sempre seguidos de `listRunningModels` para atualizar o estado.
+5. **Sincronização entre Cubits** — `salvador_desktop_app.dart` → `_ShellScreenState.build` (`MultiBlocListener`)
+   Ao `WorkspaceState` mudar de raiz/host/modelo/permissões (ou terminar uma reconexão), a View chama `FileExplorerCubit.setRoot(root)` e `ChatCubit.attachSession(host:, model:, options:, root:, permissions:)`. Ao `modelState`/`connecting` mudarem, chama `ChatCubit.updateReadiness(...)`, que substitui a checagem `connectionState == ready && modelState == running` do controlador antigo.
 
-6. **Configurações** — `salvador_desktop_app.dart` → `_SettingsDialog`
-   Modal com controllers locais que só gravam ao salvar. “Testar” chama `DesktopController.testHost` (client probe em novo host + latência + contagem de modelos, sem mutar estado). “Salvar e reconectar” chama `saveSettings`, que valida o host, e, se mudou, valida o novo servidor por um client probe antes de comitar qualquer valor; erros propagam sem descartar o último estado válido. Permissões (editar/executar) viram `AgentPermissions` na sessão; acesso à rede fica desligado/indisponível com a explicação do shell sem sandbox.
+6. **Interações da top bar** — `presentation/desktop/content/workspace_top_bar.dart` + `presentation/desktop/widgets/folder_menu.dart` / `model_menu.dart` / `start_stop_button.dart`
+   Pasta: menu lista `recentRoots` com marca da ativa e `file_selector.getDirectoryPath` para o picker nativo; seleção chama `WorkspaceCubit.selectRoot`, que valida a pasta, deduplica recentes e persiste. Modelo: menu mostra status, tamanho, quantização e contexto (`WorkspaceCubit.fetchModelContext` → `OllamaRepository.showModelContext` → `/api/show`); seleção chama `WorkspaceCubit.selectModel`, que carrega o modelo (`loadModel` → `/api/generate` com prompt vazio) e persiste a escolha. Iniciar/encerrar chama `startModel`/`stopModel`, sempre seguidos de atualização de `runningModels`.
 
-7. **Envio ao agente** — `desktop_controller.dart` → `send`
-   Exige `connectionState == ready`, `modelState == running` e sessão criada; registra o primeiro prompt/data da sessão atual, adiciona a mensagem do usuário e chama `AgentSession.sendDetailed`. Tool calls concluídas viram `ToolActivity` (com o resultado textual) via `onToolResult` e notificam o painel esquerdo.
+7. **Configurações** — `presentation/desktop/content/settings_dialog.dart` (`SettingsDialog` + `SettingsCubit`)
+   Modal que cria um `SettingsCubit` (via `registerFactoryParam`) com os valores atuais do `WorkspaceState`; os campos de texto livre (host/contexto) usam `TextEditingController`s locais no `_SettingsDialogBodyState`, não reconstruídos a cada emissão do Cubit. "Testar" chama `SettingsCubit.testHost` (sonda via `OllamaRepository`, sem mutar `WorkspaceState`). "Salvar e reconectar" chama `SettingsCubit.save`, cujo `onSave` callback delega a `WorkspaceCubit.saveSettings` — que valida o host e, se mudou, sonda o novo servidor antes de comitar qualquer valor. Permissões (editar/executar) viram `AgentPermissions` repassadas ao `ChatCubit.attachSession` pelo `MultiBlocListener`; acesso à rede fica desligado/indisponível com a explicação do shell sem sandbox.
 
-8. **Atividade e sessões** — `salvador_desktop_app.dart` → `_ActivityPanel` / `_ActivityRail`
-   Painel escuro de 286 px lista atividades com selo/cor por ferramenta e timestamps relativos, e sessões (atual com barra coral + resumos persistidos). “Nova sessão” chama `newSession`, que persiste o resumo (título do primeiro prompt, data, contagem de ações) antes de limpar.
+8. **Envio ao agente** — `presentation/desktop/view_model/chat_cubit.dart` → `ChatCubit.send`
+   Exige `_ready == true` (mantido por `updateReadiness`, ver passo 5); registra o primeiro prompt/data da sessão atual, adiciona a mensagem do usuário e chama `ChatRepository.send` (que delega a `AgentSession.sendDetailed` via `data/datasources/chat_agent_datasource.dart`). Tool calls concluídas chegam por um `Stream<ToolActivityEntity>` (adaptado do callback `onToolResult` da `AgentSession`) e viram `ToolActivityEntity` na lista de atividades.
 
-9. **Árvore e preview** — `desktop_controller.dart` → `refreshTree` / `openPreview` e `salvador_desktop_app.dart` → `_FilesPanel` / `_PreviewPane`
-   A árvore é indexada com `Directory.listSync(followLinks: false)`, ignorando `FileMentionService.ignoredDirectories` e symlinks, ordenada pastas-antes-de-arquivos; filtro case-insensitive achata a visão. Abrir um arquivo lê pela ferramenta `read_file` de um `ToolRegistry` com `AgentPermissions.readOnly` (mesma resolução confinada das ferramentas), produz `FilePreview` com linguagem, linhas e tamanho, e o centro exibe o corpo numerado selecionável com highlight leve; binário, UTF-8 inválido, caminho fora da raiz, arquivo removido/sem permissão viram `previewError` apresentável. “Mencionar com @” insere o caminho no composer com a codificação de aspas para espaços.
+9. **Atividade e sessões** — `presentation/desktop/widgets/activity_panel.dart`
+   Painel escuro de 286 px lista atividades (do `ChatState.activities`) com selo/cor por ferramenta e timestamps relativos, e sessões (`WorkspaceState.sessions` + `ChatState.currentSessionSummary` para a sessão em andamento). "Nova sessão" chama `ChatCubit.newSession(onSessionEnded: ...)`, que calcula o resumo (título do primeiro prompt, data, contagem de atividades) e invoca o callback ligado a `WorkspaceCubit.recordSession`, que persiste antes de a sessão ser limpa.
 
-10. **Persistência** — `desktop_controller.dart` → `_persist` / `app/lib/src/desktop/desktop_state_store.dart` → `save`
-    Toda ação bem-sucedida que muda preferências grava `DesktopPersistedState` com gravação atômica (arquivo temporário + rename); o store normaliza recentes (dedupe, máx. 8) e sessões (mais novas, máx. 20).
+10. **Árvore e preview** — `presentation/desktop/view_model/file_explorer_cubit.dart` + `data/datasources/workspace_datasource.dart`
+    A árvore é indexada com `Directory.listSync(followLinks: false)` dentro de `WorkspaceDataSource.listTree`, ignorando `FileMentionService.ignoredDirectories` e symlinks, ordenada pastas-antes-de-arquivos; filtro case-insensitive achata a visão (`FileExplorerCubit._visibleEntries`). Abrir um arquivo (`FileExplorerCubit.openPreview`) lê pela ferramenta `read_file` de um `ToolRegistry` com `AgentPermissions.readOnly` (mesma resolução confinada das ferramentas, dentro de `WorkspaceDataSource`), produz `FilePreviewEntity` com linguagem, linhas e tamanho (calculado a partir do conteúdo lido, não de um cache da árvore), e o centro exibe o corpo numerado selecionável com highlight leve (`presentation/desktop/widgets/code_highlighter.dart`); binário, UTF-8 inválido, caminho fora da raiz, arquivo removido/sem permissão viram `previewError` apresentável. "Mencionar com @" insere o caminho no composer com a codificação de aspas para espaços.
+
+11. **Persistência** — `workspace_cubit.dart` → `_persist` / `app/lib/common/services/desktop_storage_service.dart` → `save`
+    Toda ação bem-sucedida que muda preferências grava `DesktopPreferencesEntity` com gravação atômica (arquivo temporário + rename); o service normaliza recentes (dedupe, máx. 8) e sessões (mais novas, máx. 20).
 
 ### Caminhos alternativos
 
-- **Servidor indisponível:** falhas de conexão/HTTP viram `OllamaException`/`SocketException` no client e são convertidas em `connectionError` com `connectionState: failed`; configurações e árvore continuam utilizáveis.
-- **Modelo parado:** `send` recusa com “O modelo selecionado esta parado. Inicie o modelo antes de enviar.”, sem descartar a mensagem digitada.
-- **Erro no preview:** o resultado `ERRO:` da ferramenta de leitura vira `previewError` e o centro exibe a mensagem com botão de fechar.
-- **Estado corrompido/ausente:** `DesktopStateStore.load` devolve defaults e não sobrescreve o arquivo até um save válido.
+- **Servidor indisponível:** falhas de conexão/HTTP viram `NetworkException`/`OllamaServerException` (`config/error/app_exception.dart`), classificadas pelo `OllamaRepositoryImpl`, e aparecem como `WorkspaceState.errorKind`/`error`; configurações e árvore continuam utilizáveis.
+- **Modelo parado:** `ChatCubit.send` recusa com `ChatErrorKind.sessionNotReady` quando `_ready == false`, sem descartar a mensagem digitada (o composer só limpa o texto após a chamada).
+- **Erro no preview:** o resultado de erro do `WorkspaceRepository.readFile` (`FileSystemFailureException`, a partir do `ERRO:` da ferramenta de leitura) vira `previewError` e o centro exibe a mensagem com botão de fechar.
+- **Estado corrompido/ausente:** `DesktopStorageService.load` devolve defaults e não sobrescreve o arquivo até um save válido.
 
 ## Arquivos Envolvidos
 
 | Camada | Arquivo | Responsabilidade |
 |--------|---------|------------------|
-| Apresentação | `app/lib/src/desktop/salvador_desktop_app.dart` | Shell: title bar, top bar, menus, modal de configurações, painéis/rails, chat, composer e preview |
-| Estado | `app/lib/src/desktop/desktop_controller.dart` | Estado do workspace (conexão, modelo, configurações, atividades, sessões, árvore, preview) e orquestração das ações assíncronas |
-| Persistência | `app/lib/src/desktop/desktop_state_store.dart` | JSON versionado no diretório de dados do SO, leitura defensiva e gravação atômica |
-| Sistema | `app/lib/src/desktop/system_memory.dart` | RAM disponível por plataforma (`vm_stat`+`sysctl`, `/proc/meminfo`, CIM) para o menu de modelos |
-| Bootstrap | `app/lib/main.dart` | Inicialização do binding e do `window_manager` no macOS |
+| Bootstrap | `app/lib/main.dart` | Inicialização do binding, `AppInjector.setupDependencies()` e do `window_manager` no macOS |
+| DI | `app/lib/config/inject/app_injector.dart` | Registro de services, datasources, repositories e cubits no GetIt |
+| Erros | `app/lib/config/error/{result_pattern,app_exception}.dart` | `Result<T>` (Ok/Error) e hierarquia `AppException` do app |
+| Domínio | `app/lib/domain/entities/*.dart` | Entidades imutáveis (ChatMessage, ToolActivity, WorkspaceTreeEntry, FilePreview, PersistedSessionSummary, DesktopPreferences, HostTestResult) |
+| Domínio | `app/lib/domain/interfaces/{ollama,chat,workspace}_repository.dart` | Contratos de Repository |
+| Dados | `app/lib/data/datasources/*.dart` | `OllamaRemoteDataSource`, `ChatAgentDataSource` (encapsula `AgentSession`, stateful), `WorkspaceDataSource` (árvore + `ToolRegistry`/`FileMentionService`) |
+| Dados | `app/lib/data/repositories/*_repository_impl.dart` | Classificam falhas em `AppException`, convertem para `Result<T>` |
+| Serviços | `app/lib/common/services/desktop_storage_service.dart` | JSON versionado no diretório de dados do SO, leitura defensiva e gravação atômica |
+| Serviços | `app/lib/common/services/system_memory_service.dart` | RAM disponível por plataforma (`vm_stat`+`sysctl`, `/proc/meminfo`, CIM) para o menu de modelos |
+| Estado | `app/lib/presentation/desktop/view_model/workspace_{cubit,state}.dart` | Conexão, modelo, pasta, configurações, sessões persistidas |
+| Estado | `app/lib/presentation/desktop/view_model/chat_{cubit,state}.dart` | Mensagens, atividades, envio, sessão em andamento |
+| Estado | `app/lib/presentation/desktop/view_model/file_explorer_{cubit,state}.dart` | Árvore, filtro, preview, menções |
+| Estado | `app/lib/presentation/desktop/view_model/settings_{cubit,state}.dart` | Formulário do diálogo de configurações |
+| Apresentação | `app/lib/src/desktop/salvador_desktop_app.dart` | Shell: tema, `_ShellScreenState` (resolve Cubits, `MultiBlocListener`, composer, scroll) |
+| Apresentação | `app/lib/presentation/desktop/content/{workspace_top_bar,settings_dialog,composer}.dart` | Blocos únicos da View (top bar, diálogo de configurações, composer) |
+| Apresentação | `app/lib/presentation/desktop/widgets/*.dart` | Componentes reutilizados (menus, botões, painel/rail de atividade, painel/rail de arquivos, preview, cartões de chat, highlighter) |
+| Utilitários | `app/lib/common/utils/formatters.dart` | `formatBytes`/`relativeTime`/`formatSessionDate` |
 | Agente (pacote) | `lib/src/agent.dart` | `AgentSession` com `AgentPermissions` e observador `onToolResult` |
 | Cliente Ollama (pacote) | `lib/src/ollama_client.dart` | `/api/chat`, `/api/tags`, `/api/ps`, `/api/show`, `/api/generate` (load/unload) e `/api/version` |
 | Ferramentas (pacote) | `lib/src/tools.dart` | `ToolRegistry` filtrado por permissões; `read_file` rejeita binário/UTF-8 inválido |
 | Menções (pacote) | `lib/src/file_mentions.dart` | Autocomplete de `@`, expansão de conteúdo e `ignoredDirectories` compartilhado com a árvore |
-| Testes | `app/test/desktop_controller_test.dart`, `app/test/desktop_state_store_test.dart`, `app/test/system_memory_test.dart`, `app/test/salvador_desktop_app_test.dart` | Contratos do controlador/store/memória e widget tests do shell |
+| Testes | `app/test/presentation/desktop/*_test.dart` | `blocTest` dos 4 Cubits com fakes de Repository |
+| Testes | `app/test/data/**/*_test.dart` | Testes de RepositoryImpl com fakes de DataSource |
+| Testes | `app/test/domain/entities/*_test.dart`, `app/test/config/error/*_test.dart` | Entidades e `Result`/`AppException` |
+| Testes | `app/test/common/services/*_test.dart` | `DesktopStorageService`/`SystemMemoryReader` |
+| Testes | `app/test/salvador_desktop_app_test.dart` | Widget tests do shell: registra Cubits reais no `AppInjector`, fakeando só `OllamaClient` e `DesktopStorageService` |
 
 ## Regras de Negócio Relevantes
 
-- **Persistir só após sucesso** — `desktop_controller.dart`: troca de modelo/pasta/host só grava o store depois de a ação validar; `saveSettings` valida o novo servidor por um client probe antes de comitar qualquer campo.
-- **Servidor conectado ≠ modelo carregado** — `desktop_controller.dart`: `connectionState` vem do HTTP; `modelState` deriva de `/api/ps`. Envio ao agente exige os dois; configurações funcionam com modelo parado.
-- **Histórico sem contexto** — `desktop_controller.dart`: resumos de sessão guardam título, data e contagem de ações; mensagens nunca são serializadas nem restauradas no `AgentSession`.
-- **Preview usa o confinamento das ferramentas** — `desktop_controller.dart`: leitura do preview passa por `ToolRegistry` com `AgentPermissions.readOnly`, nunca `File(path)` direto; binário/UTF-8 inválido é erro apresentável.
-- **Acesso à rede indisponível** — `salvador_desktop_app.dart`: o toggle fica desligado e desabilitado porque `run_command` executa sem sandbox de rede.
-- **Árvore não segue symlinks** — `desktop_controller.dart`: indexação com `followLinks: false` e diretórios ignorados compartilhados com `FileMentionService`.
+- **Persistir só após sucesso** — `workspace_cubit.dart`: troca de modelo/pasta/host só grava o service depois de a ação validar; `saveSettings` valida o novo servidor por uma sondagem antes de comitar qualquer campo.
+- **Servidor conectado ≠ modelo carregado** — `workspace_cubit.dart`/`chat_cubit.dart`: `WorkspaceState.connecting`/`errorKind` vêm do HTTP; `modelState` deriva de `/api/ps`. `ChatCubit._ready` (mantido por `updateReadiness`) exige os dois; configurações funcionam com modelo parado.
+- **Histórico sem contexto** — `chat_cubit.dart`: `currentSessionSummary` guarda título, data e contagem de atividades; mensagens nunca são serializadas nem restauradas na `AgentSession`.
+- **Preview usa o confinamento das ferramentas** — `workspace_datasource.dart`: leitura do preview passa por `ToolRegistry` com `AgentPermissions.readOnly`, nunca `File(path)` direto; binário/UTF-8 inválido é erro apresentável.
+- **Acesso à rede indisponível** — `settings_dialog.dart`: o toggle fica desligado e desabilitado porque `run_command` executa sem sandbox de rede.
+- **Árvore não segue symlinks** — `workspace_datasource.dart`: indexação com `followLinks: false` e diretórios ignorados compartilhados com `FileMentionService`.
+- **Cubits não se referenciam entre si** — toda sincronização entre `WorkspaceCubit`/`ChatCubit`/`FileExplorerCubit` passa pela View (`MultiBlocListener` ou callback explícito como `onSessionEnded`), nunca por um Cubit segurando outro.
 
 ## Dependências Externas
 
 - Servidor Ollama em `http://127.0.0.1:11434` (configurável), endpoints `/api/chat`, `/api/tags`, `/api/ps`, `/api/show`, `/api/generate`, `/api/version`.
 - `file_selector` (picker nativo de pasta) e `window_manager` (title bar oculta no macOS), exclusivos de `app/pubspec.yaml`.
+- `flutter_bloc`/`get_it` (state management + DI) e `bloc_test`/`mocktail`/`checks` (dev, testes), adicionados nesta migração.
 - Fontes Archivo e JetBrains Mono empacotadas como assets em `app/assets/fonts/`.
 
 ## Observações
 
-- **A descoberta por CLI saiu do desktop.** O `OllamaDiscovery` e o runner de caminhos absolutos continuam apenas na CLI (`bin/`); o desktop resolve tudo por HTTP. A ressalva do AGENTS.md sobre `PATH` do app GUI perdeu o consumidor no fluxo desktop, mas segue valendo para a CLI.
-- **A árvore é indexada de forma síncrona** (`listSync`), como o `FileMentionService` já fazia. A mitigação de "indexação assíncrona" do plano não foi necessária para os testes; em workspaces muito grandes o primeiro `refreshTree` pode pausar a UI.
-- **O modal não fecha menus por conta própria:** selecionar o mesmo modelo (no-op) deixa o menu aberto, pois o fechamento ocorre via rebuild por notificação do controlador.
+- **A descoberta por CLI saiu do desktop.** O `OllamaDiscovery` e o runner de caminhos absolutos continuam apenas na CLI (`bin/`); o desktop resolve tudo por HTTP.
+- **A árvore é indexada de forma síncrona** (`listSync`, dentro de `WorkspaceDataSource`). Em workspaces muito grandes o primeiro `setRoot` pode pausar a UI.
+- **O modal não fecha menus por conta própria:** selecionar o mesmo modelo (no-op) deixa o menu aberto, pois o fechamento ocorre via rebuild por emissão do Cubit.
+- **Sem GoRouter.** O app tem uma única tela (`_ShellScreen`); o diálogo de configurações é modal (`showDialog`) e o preview é uma troca de painel dentro do shell, não uma rota navegável. Introduzir GoRouter para um único destino seria infraestrutura sem uso real — decisão registrada em `docs/plan/salvador-desktop-clean-architecture/00-indice.md`.
+- **`WorkspaceInitial` é hoje inatingível.** `WorkspaceCubit` inicia direto em `WorkspaceReady` com valores default (para simplificar os `BlocBuilder`s da View); o estado `WorkspaceInitial` existe no arquivo `workspace_state.dart` mas nunca é emitido. Não é um bug funcional, mas quem mexer em `workspace_state.dart` deve saber que essa classe é vestigial.

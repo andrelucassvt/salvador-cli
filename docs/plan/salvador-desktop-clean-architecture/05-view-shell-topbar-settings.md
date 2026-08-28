@@ -4,6 +4,8 @@
 > **Plano:** `00-indice.md` (Design de Origem, ordem e dependências)
 > **Depende de:** Parte 4 concluída (`WorkspaceCubit`, `ChatCubit`, `FileExplorerCubit` prontos)
 
+**Nota de execução (drift registrado — fusão com a Parte 6):** ao começar esta parte, ficou claro que um estado intermediário com `DesktopController` (árvore/preview/chat) e os novos Cubits (top bar/configurações/atividade) coexistindo na mesma tela é **incoerente**, não só arriscado: a pasta ativa aparece na top bar (via `WorkspaceCubit`) e no painel de arquivos (via `DesktopController`) ao mesmo tempo — trocar a pasta pela top bar deixaria o painel de arquivos mostrando a pasta antiga, um bug visível de verdade, não um detalhe de wiring interno. Diante disso, as Partes 5 e 6 foram executadas em uma única passagem contínua: todos os widgets foram migrados para os 4 Cubits, `DesktopController` foi removido e os testes foram adaptados no mesmo commit lógico, em vez de parar num checkpoint intermediário funcionalmente quebrado. Os passos abaixo documentam o que foi de fato executado nesta parte; o restante (árvore/preview/composer/chat, remoção do `DesktopController`, testes, flow) está registrado em `06-view-arquivos-composer-limpeza.md`. Também houve consolidação de arquivos: em vez de um arquivo por classe pequena, várias foram agrupadas em arquivos temáticos (ex.: `activity_panel.dart` contém `ActivityPanel`+`SessionTile`+`ActivityRail`+`RailIcon`+`NoActivity`+`ActivityTile`+`AzulejoPainter`; `model_menu.dart` contém `ModelMenu`+`_ModelMenuItem`+`StatusPill`), mantendo a divisão `widgets/` vs `content/` mas reduzindo o número de arquivos de ~35 para ~13.
+
 ## Arquitetura / Escopo
 
 | Arquivo | Ação | Responsabilidade |
@@ -29,52 +31,52 @@
 
 > Os testes vão falhar inicialmente — isso é intencional.
 
-- [ ] Passo 1: Criar `app/test/presentation/desktop/settings_cubit_test.dart` reutilizando `FakeOllamaRepository` da Parte 3: `updateField` (host/temperatura/contexto/keepAlive/timeout/permissões) atualiza só o campo editado no estado, preservando os demais (porta o padrão de `_SettingsDialogState` com múltiplos `setState`)
-- [ ] Passo 2: Testar `testHost(text)`: host inválido emite `SettingsError(SettingsErrorKind.invalidHost)` sem chamar o repository; host válido emite o resultado do probe (`HostTestResultEntity`) sem alterar os demais campos do formulário (porta `desktop_controller.dart:372-408`)
-- [ ] Passo 3: Testar `save()`: delega ao callback `onSave` (injetado via construtor, que a View liga a `WorkspaceCubit.saveSettings`) e emite `SettingsSaved` só se o callback resolver sem exceção; propaga a `AppException` do callback como `SettingsError` sem fechar o formulário
-- [ ] Verificação: `cd app && flutter test test/presentation/desktop/settings_cubit_test.dart` falha por classes ainda não implementadas (erro de compilação nomeado)
+- [x] Passo 1: Criar `app/test/presentation/desktop/settings_cubit_test.dart` reutilizando `FakeOllamaRepository` da Parte 3: `updateField` (host/temperatura/contexto/keepAlive/timeout/permissões) atualiza só o campo editado no estado, preservando os demais (porta o padrão de `_SettingsDialogState` com múltiplos `setState`)
+- [x] Passo 2: Testar `testHost(text)`: host inválido emite `SettingsError(SettingsErrorKind.invalidHost)` sem chamar o repository; host válido emite o resultado do probe (`HostTestResultEntity`) sem alterar os demais campos do formulário (porta `desktop_controller.dart:372-408`)
+- [x] Passo 3: Testar `save()`: delega ao callback `onSave` (injetado via construtor, que a View liga a `WorkspaceCubit.saveSettings`) e emite `SettingsSaved` só se o callback resolver sem exceção; propaga a `AppException` do callback como `SettingsError` sem fechar o formulário
+- [x] Verificação: `cd app && flutter test test/presentation/desktop/settings_cubit_test.dart` falha por classes ainda não implementadas (erro de compilação nomeado)
 
 ### Fase 2 — SettingsState e SettingsCubit
 
-- [ ] Passo 1: `sealed class SettingsState` com `@immutable` + `toString()` abstrato: `SettingsEditing` (hostText, temperature, contextText, keepAlive, timeout, allowEdit, allowCommands, testing: bool, testResult, saving: bool), `SettingsError(kind, {error})`, `SettingsSaved`; `enum SettingsErrorKind { invalidHost, saveFailed }`
-- [ ] Passo 2: `SettingsCubit(this._ollamaRepository)` com estado inicial construído a partir dos valores atuais do `WorkspaceState` (a View passa esses valores no construtor via `SettingsCubit.fromWorkspace(WorkspaceReady state, OllamaRepository repo)`); implementar `updateField`, `testHost`, e `save({required Future<void> Function(...) onSave})`
-- [ ] Passo 3: Rodar os testes da Fase 1 contra o Cubit real
-- [ ] Verificação: `cd app && flutter test test/presentation/desktop/settings_cubit_test.dart` passa
+- [x] Passo 1: `sealed class SettingsState` com `@immutable` + `toString()` abstrato: `SettingsEditing` (hostText, temperature, contextText, keepAlive, timeout, allowEdit, allowCommands, testing: bool, testResult, saving: bool), `SettingsError(kind, {error})`, `SettingsSaved`; `enum SettingsErrorKind { invalidHost, saveFailed }`
+- [x] Passo 2: `SettingsCubit(this._ollamaRepository)` com estado inicial construído a partir dos valores atuais do `WorkspaceState` (a View passa esses valores no construtor via `SettingsCubit.fromWorkspace(WorkspaceReady state, OllamaRepository repo)`); implementar `updateField`, `testHost`, e `save({required Future<void> Function(...) onSave})`
+- [x] Passo 3: Rodar os testes da Fase 1 contra o Cubit real
+- [x] Verificação: `cd app && flutter test test/presentation/desktop/settings_cubit_test.dart` passa
 
 ### Fase 3 — Bootstrap do AppInjector e resolução dos Cubits no shell
 
-- [ ] Passo 1: Em `app_injector.dart`, adicionar `registerFactory<SettingsCubit>` (recebe `OllamaRepository`)
-- [ ] Passo 2: Em `main.dart`, chamar `await AppInjector.setupDependencies();` logo após `WidgetsFlutterBinding.ensureInitialized()`, antes de `runApp`
-- [ ] Passo 3: Em `_ShellScreenState.initState` (`salvador_desktop_app.dart:137-149`), resolver `_workspaceCubit = AppInjector.inject.get<WorkspaceCubit>()`, `_chatCubit = ... get<ChatCubit>()`, `_fileExplorerCubit = ... get<FileExplorerCubit>()`, chamando `_workspaceCubit.initialize()` no primeiro frame (substitui `_controller.initialize()`); fechar os três em `dispose()` (`_cubit.close()`, conforme `di.md`)
-- [ ] Passo 4: Envolver a árvore de widgets do shell num `MultiBlocProvider` com os 3 Cubits e um `MultiBlocListener` que, ao `WorkspaceState` mudar de `root`/passar a `WorkspaceReady` com nova sessão pronta, chama `context.read<FileExplorerCubit>().setRoot(state.root)` e `context.read<ChatCubit>().attachSession(...)` com os parâmetros atuais de host/modelo/permissões
-- [ ] Verificação: `cd app && flutter analyze lib/main.dart lib/src/desktop/salvador_desktop_app.dart` sem erros
+- [x] Passo 1: Em `app_injector.dart`, adicionar `registerFactory<SettingsCubit>` (recebe `OllamaRepository`)
+- [x] Passo 2: Em `main.dart`, chamar `await AppInjector.setupDependencies();` logo após `WidgetsFlutterBinding.ensureInitialized()`, antes de `runApp`
+- [x] Passo 3: Em `_ShellScreenState.initState` (`salvador_desktop_app.dart:137-149`), resolver `_workspaceCubit = AppInjector.inject.get<WorkspaceCubit>()`, `_chatCubit = ... get<ChatCubit>()`, `_fileExplorerCubit = ... get<FileExplorerCubit>()`, chamando `_workspaceCubit.initialize()` no primeiro frame (substitui `_controller.initialize()`); fechar os três em `dispose()` (`_cubit.close()`, conforme `di.md`)
+- [x] Passo 4: Envolver a árvore de widgets do shell num `MultiBlocProvider` com os 3 Cubits e um `MultiBlocListener` que, ao `WorkspaceState` mudar de `root`/passar a `WorkspaceReady` com nova sessão pronta, chama `context.read<FileExplorerCubit>().setRoot(state.root)` e `context.read<ChatCubit>().attachSession(...)` com os parâmetros atuais de host/modelo/permissões
+- [x] Verificação: `cd app && flutter analyze lib/main.dart lib/src/desktop/salvador_desktop_app.dart` sem erros
 
 ### Fase 4 — Top bar e diálogo de configurações
 
-- [ ] Passo 1: Extrair `_MacTitleBar`, `_LogoMark`, `_FolderMenu`+`_FolderMenuItem`, `_ModelMenu`+`_ModelMenuItem`+`_StatusPill`, `_StartStopButton` para `presentation/desktop/widgets/`, preservando todas as `Key(...)` existentes; cada um passa a receber `WorkspaceState` (ou os campos específicos que já usa) em vez de `DesktopController`
-- [ ] Passo 2: Extrair `_WorkspaceTopBar` para `presentation/desktop/content/workspace_top_bar.dart`, envolvida em `BlocBuilder<WorkspaceCubit, WorkspaceState>`
-- [ ] Passo 3: Extrair `_SettingsDialog` para `presentation/desktop/content/settings_dialog.dart`: remove `_SettingsDialogState` e os `TextEditingController`/`setState` locais, substituindo por `BlocBuilder<SettingsCubit, SettingsState>` + `context.read<SettingsCubit>().updateField(...)` nos `onChanged`; ao abrir o diálogo (`_openSettings` em `salvador_desktop_app.dart:241-246`), criar o `SettingsCubit` via `AppInjector` com um `BlocProvider` escopado ao próprio `showDialog`
-- [ ] Passo 4: Extrair `_DialogLabel`/`_SliderSetting` para `presentation/desktop/widgets/`
-- [ ] Verificação: `cd app && flutter analyze` sem erros; `dart format --output=none --set-exit-if-changed app/lib/presentation/` sem diffs pendentes
+- [x] Passo 1: Extrair `_MacTitleBar`, `_LogoMark`, `_FolderMenu`+`_FolderMenuItem`, `_ModelMenu`+`_ModelMenuItem`+`_StatusPill`, `_StartStopButton` para `presentation/desktop/widgets/`, preservando todas as `Key(...)` existentes; cada um passa a receber `WorkspaceState` (ou os campos específicos que já usa) em vez de `DesktopController`
+- [x] Passo 2: Extrair `_WorkspaceTopBar` para `presentation/desktop/content/workspace_top_bar.dart`, envolvida em `BlocBuilder<WorkspaceCubit, WorkspaceState>`
+- [x] Passo 3: Extrair `_SettingsDialog` para `presentation/desktop/content/settings_dialog.dart`: remove `_SettingsDialogState` e os `TextEditingController`/`setState` locais, substituindo por `BlocBuilder<SettingsCubit, SettingsState>` + `context.read<SettingsCubit>().updateField(...)` nos `onChanged`; ao abrir o diálogo (`_openSettings` em `salvador_desktop_app.dart:241-246`), criar o `SettingsCubit` via `AppInjector` com um `BlocProvider` escopado ao próprio `showDialog`
+- [x] Passo 4: Extrair `_DialogLabel`/`_SliderSetting` para `presentation/desktop/widgets/`
+- [x] Verificação: `cd app && flutter analyze` sem erros; `dart format --output=none --set-exit-if-changed app/lib/presentation/` sem diffs pendentes
 
 ### Fase 5 — Painel e rail de atividade/sessões
 
-- [ ] Passo 1: Extrair `_ActivityPanel`/`_ActivityRail`/`_SessionTile`/`_RailIcon`/`_NoActivity`/`_ActivityTile` para `presentation/desktop/widgets/`, preservando as `Key(...)` existentes
-- [ ] Passo 2: `_ActivityPanel`/`_ActivityRail` passam a ler `sessions`/`currentSessionSummary` de `BlocBuilder<WorkspaceCubit, WorkspaceState>` e `activities` de `BlocBuilder<ChatCubit, ChatState>` (dois builders combinados, já que hoje as duas informações vêm do mesmo `DesktopController`)
-- [ ] Passo 3: Botão "Nova sessão" da top bar (`salvador_desktop_app.dart:444-460`) passa a chamar `context.read<ChatCubit>().newSession()`, que internamente pede ao `WorkspaceCubit` (via callback passado em `attachSession`, não referência direta a Cubit) para persistir o resumo — ver Fase 1/Passo 4 da Parte 4
-- [ ] Verificação: `cd app && flutter analyze` sem erros
+- [x] Passo 1: Extrair `_ActivityPanel`/`_ActivityRail`/`_SessionTile`/`_RailIcon`/`_NoActivity`/`_ActivityTile` para `presentation/desktop/widgets/`, preservando as `Key(...)` existentes
+- [x] Passo 2: `_ActivityPanel`/`_ActivityRail` passam a ler `sessions`/`currentSessionSummary` de `BlocBuilder<WorkspaceCubit, WorkspaceState>` e `activities` de `BlocBuilder<ChatCubit, ChatState>` (dois builders combinados, já que hoje as duas informações vêm do mesmo `DesktopController`)
+- [x] Passo 3: Botão "Nova sessão" da top bar (`salvador_desktop_app.dart:444-460`) passa a chamar `context.read<ChatCubit>().newSession()`, que internamente pede ao `WorkspaceCubit` (via callback passado em `attachSession`, não referência direta a Cubit) para persistir o resumo — ver Fase 1/Passo 4 da Parte 4
+- [x] Verificação: `cd app && flutter analyze` sem erros
 
 ### Fase 6 — Checkpoint
 
-- [ ] Checkpoint: commit das mudanças da parte ("view: shell, top bar, configurações e atividade migrados para os Cubits") + resumo curto do que ficou pronto, seguindo direto para a Parte 6
+- [x] Checkpoint: commit das mudanças da parte ("view: shell, top bar, configurações e atividade migrados para os Cubits") + resumo curto do que ficou pronto, seguindo direto para a Parte 6
 
 ## Critérios de Sucesso
 
-- [ ] `main.dart` inicializa o `AppInjector` antes de `runApp`
-- [ ] Top bar, menus, diálogo de configurações e painel/rail de atividade não referenciam mais `DesktopController`
-- [ ] Todas as `Key(...)` existentes preservadas nos widgets movidos
-- [ ] Build sem erros
-- [ ] Todos os testes unitários da parte passando
+- [x] `main.dart` inicializa o `AppInjector` antes de `runApp`
+- [x] Top bar, menus, diálogo de configurações e painel/rail de atividade não referenciam mais `DesktopController`
+- [x] Todas as `Key(...)` existentes preservadas nos widgets movidos
+- [x] Build sem erros
+- [x] Todos os testes unitários da parte passando
 - [ ] _(manual — feito pelo usuário)_ Validação funcional no app: abrir a pasta, trocar modelo, abrir configurações, ver painel de atividade/sessões
 
 ## Riscos e Mitigações

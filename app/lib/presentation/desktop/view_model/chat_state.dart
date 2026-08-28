@@ -8,8 +8,7 @@ enum ChatErrorKind { sessionNotReady, sendFailed }
 /// Mesmo padrão de `WorkspaceState`: um único estado de conteúdo, não
 /// Initial/Loading/Loaded/Error separados - `sending` e o erro sao campos,
 /// porque a lista de mensagens precisa continuar visivel enquanto uma nova
-/// resposta carrega (mesmo comportamento de `isSending` em
-/// `desktop_controller.dart:148`, que nunca esconde `messages`).
+/// resposta carrega.
 @immutable
 sealed class ChatState {
   const ChatState();
@@ -39,9 +38,7 @@ class ChatIdle extends ChatState {
   final ChatErrorKind? errorKind;
   final Object? error;
 
-  /// Porta `DesktopController.currentSessionSummary`
-  /// (`desktop_controller.dart:511-522`): resumo em memoria da sessao em
-  /// andamento, sem histórico de mensagens.
+  /// Resumo em memoria da sessao em andamento, sem historico de mensagens.
   PersistedSessionSummaryEntity? get currentSessionSummary {
     final firstPrompt = sessionFirstPrompt;
     final startedAt = sessionStartedAt;

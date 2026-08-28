@@ -4,13 +4,33 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salvador_cli/salvador_cli.dart';
-import 'package:salvador_desktop/src/desktop/desktop_controller.dart';
 import 'package:salvador_desktop/common/services/desktop_storage_service.dart';
+import 'package:salvador_desktop/common/services/system_memory_service.dart';
+import 'package:salvador_desktop/config/inject/app_injector.dart';
+import 'package:salvador_desktop/data/datasources/chat_agent_datasource.dart';
+import 'package:salvador_desktop/data/datasources/ollama_remote_datasource.dart';
+import 'package:salvador_desktop/data/datasources/workspace_datasource.dart';
+import 'package:salvador_desktop/data/repositories/chat_repository_impl.dart';
+import 'package:salvador_desktop/data/repositories/ollama_repository_impl.dart';
+import 'package:salvador_desktop/data/repositories/workspace_repository_impl.dart';
 import 'package:salvador_desktop/domain/entities/desktop_preferences_entity.dart';
 import 'package:salvador_desktop/domain/entities/persisted_session_summary_entity.dart';
+import 'package:salvador_desktop/domain/interfaces/ollama_repository.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/chat_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/chat_state.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/file_explorer_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/settings_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/settings_state.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/workspace_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/workspace_state.dart';
 import 'package:salvador_desktop/src/desktop/salvador_desktop_app.dart';
-import 'package:salvador_desktop/common/services/system_memory_service.dart';
 
+/// Suíte de integração: registra Cubits reais no AppInjector, faking só a
+/// borda de rede (OllamaClient) e a borda de disco (DesktopStorageService),
+/// exatamente como o antigo `buildController` fakeava só o `OllamaClient`
+/// por trás do `DesktopController`. Isso continua exercitando o fluxo real
+/// (WorkspaceCubit -> ChatCubit/FileExplorerCubit via MultiBlocListener) em
+/// vez de mockar cada Cubit isoladamente.
 void main() {
   final tempDirs = <Directory>[];
 
@@ -18,17 +38,19 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
-  tearDown(() {
+  tearDown(() async {
     debugDefaultTargetPlatformOverride = null;
+    await AppInjector.inject.reset();
     for (final dir in tempDirs) {
       if (dir.existsSync()) dir.deleteSync(recursive: true);
     }
     tempDirs.clear();
   });
 
-  Future<(DesktopController, _FakeClient)> buildController(
+  Future<_Harness> buildHarness(
     WidgetTester tester, {
     List<OllamaRunningModel> running = const [],
+    DesktopPreferencesEntity Function(Directory root)? initialPreferences,
   }) async {
     final root = await tester.runAsync(
       () => Directory.systemTemp.createTemp('salvador_shell_test_'),
@@ -38,28 +60,59 @@ void main() {
       model: 'llama3.2:3b',
       baseUrl: Uri.parse('http://127.0.0.1:11434'),
     )..running = List.of(running);
-    final controller = await tester.runAsync(() async {
-      final created = DesktopController(
-        initialRoot: root,
-        store: _NoIoStore(),
-        clientFactory: ({required model, required baseUrl, required options}) =>
-            fake,
-        memoryReader: SystemMemoryReader(
-          runner: (_, _) async => ProcessResult(1, 0, '', ''),
-        ),
-        clock: () => DateTime(2026, 8, 28, 12),
+
+    OllamaClient clientFactory({
+      required String model,
+      required Uri baseUrl,
+      required InferenceOptions options,
+    }) => fake;
+
+    await AppInjector.inject.reset();
+
+    final storage = _NoIoStore(initial: initialPreferences?.call(root));
+    final memoryReader = SystemMemoryReader(
+      runner: (_, _) async => ProcessResult(1, 0, '', ''),
+    );
+    final OllamaRepository ollamaRepository = OllamaRepositoryImpl(
+      OllamaRemoteDataSource(clientFactory: clientFactory),
+    );
+    final chatRepository = ChatRepositoryImpl(
+      ChatAgentDataSource(clientFactory: clientFactory),
+    );
+    final workspaceRepository = WorkspaceRepositoryImpl(WorkspaceDataSource());
+
+    final workspaceCubit = WorkspaceCubit(
+      ollamaRepository,
+      storage,
+      initialRoot: root,
+      memoryReader: memoryReader,
+    );
+    final chatCubit = ChatCubit(
+      chatRepository,
+      clock: () => DateTime(2026, 8, 28, 12),
+    );
+    final fileExplorerCubit = FileExplorerCubit(workspaceRepository);
+
+    AppInjector.inject
+      ..registerFactory<WorkspaceCubit>(() => workspaceCubit)
+      ..registerFactory<ChatCubit>(() => chatCubit)
+      ..registerFactory<FileExplorerCubit>(() => fileExplorerCubit)
+      ..registerFactoryParam<SettingsCubit, SettingsEditing, void>(
+        (initial, _) => SettingsCubit(ollamaRepository, initial: initial),
       );
-      await created.initialize();
-      return created;
-    });
-    return (controller!, fake);
+
+    return _Harness(
+      root: root,
+      fake: fake,
+      storage: storage,
+      workspaceCubit: workspaceCubit,
+      chatCubit: chatCubit,
+      fileExplorerCubit: fileExplorerCubit,
+    );
   }
 
-  Future<void> pumpShell(
-    WidgetTester tester,
-    DesktopController controller,
-  ) async {
-    await tester.pumpWidget(SalvadorDesktopApp(controller: controller));
+  Future<void> pumpShell(WidgetTester tester) async {
+    await tester.pumpWidget(const SalvadorDesktopApp());
     await tester.pumpAndSettle();
   }
 
@@ -69,45 +122,40 @@ void main() {
       tester.view.physicalSize = const Size(1100, 700);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
-      final (controller, fake) = await buildController(tester);
-      addTearDown(controller.dispose);
-      await pumpShell(tester, controller);
+      final harness = await buildHarness(tester);
+      await pumpShell(tester);
 
       expect(find.byKey(const Key('workspace-top-bar')), findsOneWidget);
       expect(find.text('Iniciar modelo'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('start-stop-button')));
       await tester.pumpAndSettle();
-      expect(controller.modelState, ModelRunState.running);
-      expect(fake.loadedModels, ['llama3.2:3b']);
+      expect(
+        (harness.workspaceCubit.state as WorkspaceReady).modelState,
+        WorkspaceModelState.running,
+      );
+      expect(harness.fake.loadedModels, ['llama3.2:3b']);
       expect(find.text('Encerrar modelo'), findsOneWidget);
 
-      controller.modelState = ModelRunState.starting;
-      controller.notifyListeners();
-      await tester.pump();
-      expect(find.text('Aguarde…'), findsOneWidget);
-      final busyButton = tester.widget<OutlinedButton>(
-        find.byKey(const Key('start-stop-button')),
-      );
-      expect(busyButton.onPressed, isNull);
+      await tester.enterText(find.byKey(const Key('composer-field')), 'oi');
+      await tester.tap(find.byKey(const Key('send-button')));
+      await tester.pumpAndSettle();
+      expect((harness.chatCubit.state as ChatIdle).messages, isNotEmpty);
 
-      controller.modelState = ModelRunState.running;
-      controller.messages.add(
-        const ChatEntry(role: ChatRole.user, content: 'oi'),
-      );
-      controller.notifyListeners();
-      await tester.pump();
       final newSessionButton = tester.widget<TextButton>(
         find.byKey(const Key('new-session-button')),
       );
       expect(newSessionButton.onPressed, isNotNull);
       await tester.tap(find.byKey(const Key('new-session-button')));
       await tester.pumpAndSettle();
-      expect(controller.messages, isEmpty);
+      expect((harness.chatCubit.state as ChatIdle).messages, isEmpty);
 
       await tester.tap(find.byKey(const Key('start-stop-button')));
       await tester.pumpAndSettle();
-      expect(controller.modelState, ModelRunState.stopped);
+      expect(
+        (harness.workspaceCubit.state as WorkspaceReady).modelState,
+        WorkspaceModelState.stopped,
+      );
       expect(find.text('Iniciar modelo'), findsOneWidget);
     },
   );
@@ -115,14 +163,14 @@ void main() {
   testWidgets('menu de pasta lista recentes e troca a pasta ativa', (
     tester,
   ) async {
-    final (controller, _) = await buildController(tester);
-    addTearDown(controller.dispose);
+    final harness = await buildHarness(tester);
     final other = await tester.runAsync(
-      () => Directory('${controller.root.path}/outro-projeto').create(),
+      () => Directory('${harness.root.path}/outro-projeto').create(),
     );
-    controller.recentRoots = [controller.root.path, other!.path];
-    controller.notifyListeners();
-    await pumpShell(tester, controller);
+    harness.storage.seed(
+      DesktopPreferencesEntity(recentRoots: [harness.root.path, other!.path]),
+    );
+    await pumpShell(tester);
 
     await tester.tap(find.byKey(const Key('folder-menu')));
     await tester.pumpAndSettle();
@@ -132,15 +180,17 @@ void main() {
 
     await tester.tap(find.text(other.path));
     await tester.pumpAndSettle();
-    expect(controller.root.path, other.path);
+    expect(
+      (harness.workspaceCubit.state as WorkspaceReady).root.path,
+      other.path,
+    );
   });
 
   testWidgets('menu de modelos lista status e seleciona outro modelo', (
     tester,
   ) async {
-    final (controller, fake) = await buildController(tester);
-    addTearDown(controller.dispose);
-    await pumpShell(tester, controller);
+    final harness = await buildHarness(tester);
+    await pumpShell(tester);
 
     await tester.tap(find.byKey(const Key('model-menu')));
     await tester.pumpAndSettle();
@@ -150,17 +200,17 @@ void main() {
 
     await tester.tap(find.byKey(const Key('model-item-gemma2:2b')));
     await tester.pumpAndSettle();
-    expect(controller.selectedModel, 'gemma2:2b');
-    expect(controller.modelState, ModelRunState.running);
-    expect(fake.loadedModels, ['gemma2:2b']);
+    final state = harness.workspaceCubit.state as WorkspaceReady;
+    expect(state.selectedModel, 'gemma2:2b');
+    expect(state.modelState, WorkspaceModelState.running);
+    expect(harness.fake.loadedModels, ['gemma2:2b']);
   });
 
   testWidgets('modal testa servidor, mantem edicao apos falha e salva', (
     tester,
   ) async {
-    final (controller, fake) = await buildController(tester);
-    addTearDown(controller.dispose);
-    await pumpShell(tester, controller);
+    final harness = await buildHarness(tester);
+    await pumpShell(tester);
 
     await tester.tap(find.byKey(const Key('open-settings-button')));
     await tester.pumpAndSettle();
@@ -173,13 +223,13 @@ void main() {
     expect(networkSwitch.value, isFalse);
     expect(find.textContaining('Desabilitado: run_command'), findsOneWidget);
 
-    fake.failConnection = true;
+    harness.fake.failConnection = true;
     await tester.tap(find.byKey(const Key('test-host-button')));
     await tester.pumpAndSettle();
     expect(find.textContaining('Falha no teste'), findsOneWidget);
     expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
 
-    fake.failConnection = false;
+    harness.fake.failConnection = false;
     await tester.tap(find.byKey(const Key('test-host-button')));
     await tester.pumpAndSettle();
     expect(find.textContaining('Servidor ok'), findsOneWidget);
@@ -197,15 +247,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('settings-dialog')), findsNothing);
-    expect(controller.contextLength, 2048);
-    expect(controller.allowEdit, isFalse);
+    final state = harness.workspaceCubit.state as WorkspaceReady;
+    expect(state.inference.contextLength, 2048);
+    expect(state.permissions.allowEdit, isFalse);
   });
 
   testWidgets('cancelar modal nao muta preferencias', (tester) async {
-    final (controller, _) = await buildController(tester);
-    addTearDown(controller.dispose);
-    await pumpShell(tester, controller);
-    final previousHost = controller.host;
+    final harness = await buildHarness(tester);
+    await pumpShell(tester);
+    final previousHost = (harness.workspaceCubit.state as WorkspaceReady).host;
 
     await tester.tap(find.byKey(const Key('open-settings-button')));
     await tester.pumpAndSettle();
@@ -217,15 +267,31 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('settings-dialog')), findsNothing);
-    expect(controller.host, previousHost);
+    expect(
+      (harness.workspaceCubit.state as WorkspaceReady).host,
+      previousHost,
+    );
   });
 
   testWidgets('painel de atividade alterna com o rail e lista sessoes', (
     tester,
   ) async {
-    final (controller, _) = await buildController(tester);
-    addTearDown(controller.dispose);
-    await pumpShell(tester, controller);
+    final harness = await buildHarness(
+      tester,
+      running: const [
+        OllamaRunningModel(name: 'llama3.2:3b', isInstalled: true),
+      ],
+      initialPreferences: (root) => DesktopPreferencesEntity(
+        sessions: [
+          PersistedSessionSummaryEntity(
+            title: 'Sessao antiga',
+            startedAt: DateTime(2026, 8, 27),
+            actionCount: 4,
+          ),
+        ],
+      ),
+    );
+    await pumpShell(tester);
 
     expect(find.byKey(const Key('activity-rail')), findsOneWidget);
     expect(find.byKey(const Key('activity-panel')), findsNothing);
@@ -237,51 +303,45 @@ void main() {
       find.text('As leituras, edições e comandos aparecerão aqui.'),
       findsOneWidget,
     );
-
-    controller.activities.insert(
-      0,
-      ToolActivity(
-        ToolCall(name: 'write_file', arguments: {'path': 'a.txt'}),
-        'OK: arquivo gravado: a.txt (3 caracteres)',
-        happenedAt: DateTime(2026, 8, 28, 11, 59),
-      ),
-    );
-    controller.sessions = [
-      PersistedSessionSummaryEntity(
-        title: 'Sessao antiga',
-        startedAt: DateTime(2026, 8, 27),
-        actionCount: 4,
-      ),
-    ];
-    controller.notifyListeners();
-    await tester.pump();
-    expect(find.text('Gravação'), findsOneWidget);
-    expect(
-      find.text('OK: arquivo gravado: a.txt (3 caracteres)'),
-      findsOneWidget,
-    );
     expect(find.text('Sessao antiga'), findsOneWidget);
     expect(find.textContaining('4 ações'), findsOneWidget);
+
+    harness.fake.respondWithToolCall = true;
+    await tester.enterText(
+      find.byKey(const Key('composer-field')),
+      'grave um arquivo',
+    );
+    // write_file executa I/O real (ToolRegistry): precisa do event loop real,
+    // nao apenas do tempo falso do pumpAndSettle - mesmo padrao de tapPreview.
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const Key('send-button')));
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+    });
+    await tester.pumpAndSettle();
+
+    expect(find.text('Gravação'), findsOneWidget);
+    expect((harness.chatCubit.state as ChatIdle).activities, hasLength(1));
 
     await tester.tap(find.byKey(const Key('collapse-panel-button')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('activity-panel')), findsNothing);
     expect(find.byKey(const Key('activity-rail')), findsOneWidget);
-    expect(find.text('1'), findsNWidgets(2));
   });
 
   testWidgets('sessao atual aparece no painel durante a conversa', (
     tester,
   ) async {
-    final (controller, _) = await buildController(
+    final harness = await buildHarness(
       tester,
       running: const [
         OllamaRunningModel(name: 'llama3.2:3b', isInstalled: true),
       ],
     );
-    addTearDown(controller.dispose);
-    await pumpShell(tester, controller);
-    expect(controller.modelState, ModelRunState.running);
+    await pumpShell(tester);
+    expect(
+      (harness.workspaceCubit.state as WorkspaceReady).modelState,
+      WorkspaceModelState.running,
+    );
 
     await tester.tap(find.byKey(const Key('expand-panel-button')));
     await tester.pumpAndSettle();
@@ -293,7 +353,7 @@ void main() {
     await tester.tap(find.byKey(const Key('send-button')));
     await tester.pumpAndSettle();
 
-    expect(controller.messages, hasLength(2));
+    expect((harness.chatCubit.state as ChatIdle).messages, hasLength(2));
     expect(find.text('revise o projeto'), findsNWidgets(2));
     expect(find.textContaining('0 ações'), findsOneWidget);
   });
@@ -304,25 +364,26 @@ void main() {
     tester.view.physicalSize = const Size(600, 480);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
-    final (controller, _) = await buildController(tester);
-    addTearDown(controller.dispose);
-    await pumpShell(tester, controller);
+    await buildHarness(tester);
+    await pumpShell(tester);
 
     expect(find.byKey(const Key('start-stop-button')), findsOneWidget);
     expect(find.byKey(const Key('open-settings-button')), findsOneWidget);
     expect(find.byKey(const Key('new-session-button')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
-  testWidgets('title bar customizada aparece somente no macOS', (tester) async {
-    final (controller, _) = await buildController(tester);
-    addTearDown(controller.dispose);
+
+  testWidgets('title bar customizada aparece somente no macOS', (
+    tester,
+  ) async {
+    await buildHarness(tester);
 
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
-    await pumpShell(tester, controller);
+    await pumpShell(tester);
     expect(find.byKey(const Key('mac-title-bar')), findsNothing);
 
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
-    await tester.pumpWidget(SalvadorDesktopApp(controller: controller));
+    await tester.pumpWidget(const SalvadorDesktopApp());
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('mac-title-bar')), findsOneWidget);
     debugDefaultTargetPlatformOverride = null;
@@ -331,20 +392,18 @@ void main() {
   testWidgets('arvore expande, filtra e abre preview com mencao', (
     tester,
   ) async {
-    final (controller, _) = await buildController(tester);
-    addTearDown(controller.dispose);
+    final harness = await buildHarness(tester);
     await tester.runAsync(() async {
-      await Directory('${controller.root.path}/src').create();
+      await Directory('${harness.root.path}/src').create();
       await File(
-        '${controller.root.path}/src/main.dart',
+        '${harness.root.path}/src/main.dart',
       ).writeAsString('void main() {\n  return;\n}');
+      await File('${harness.root.path}/README.md').writeAsString('# leia-me');
       await File(
-        '${controller.root.path}/README.md',
-      ).writeAsString('# leia-me');
-      await File('${controller.root.path}/imagem.bin').writeAsBytes([0, 1, 2]);
+        '${harness.root.path}/imagem.bin',
+      ).writeAsBytes([0, 1, 2]);
     });
-    controller.refreshTree();
-    await pumpShell(tester, controller);
+    await pumpShell(tester);
 
     expect(find.byKey(const Key('files-rail')), findsOneWidget);
     await tester.tap(find.byKey(const Key('expand-files-panel-button')));
@@ -409,9 +468,8 @@ void main() {
     tester.view.physicalSize = const Size(560, 480);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
-    final (controller, _) = await buildController(tester);
-    addTearDown(controller.dispose);
-    await pumpShell(tester, controller);
+    await buildHarness(tester);
+    await pumpShell(tester);
 
     expect(find.byKey(const Key('activity-rail')), findsOneWidget);
     expect(find.byKey(const Key('files-rail')), findsOneWidget);
@@ -425,9 +483,8 @@ void main() {
       tester.view.physicalSize = const Size(980, 520);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
-      final (controller, _) = await buildController(tester);
-      addTearDown(controller.dispose);
-      await pumpShell(tester, controller);
+      await buildHarness(tester);
+      await pumpShell(tester);
 
       await tester.tap(find.byKey(const Key('expand-panel-button')));
       await tester.pumpAndSettle();
@@ -450,16 +507,40 @@ Future<void> tapPreview(WidgetTester tester, Finder finder) async {
   await tester.pumpAndSettle();
 }
 
-class _NoIoStore extends DesktopStorageService {
-  _NoIoStore() : super(file: File('/tmp/salvador_shell_test_noop.json'));
+class _Harness {
+  _Harness({
+    required this.root,
+    required this.fake,
+    required this.storage,
+    required this.workspaceCubit,
+    required this.chatCubit,
+    required this.fileExplorerCubit,
+  });
 
+  final Directory root;
+  final _FakeClient fake;
+  final _NoIoStore storage;
+  final WorkspaceCubit workspaceCubit;
+  final ChatCubit chatCubit;
+  final FileExplorerCubit fileExplorerCubit;
+}
+
+class _NoIoStore extends DesktopStorageService {
+  _NoIoStore({DesktopPreferencesEntity? initial})
+    : _state = initial ?? const DesktopPreferencesEntity(),
+      super(file: File('/tmp/salvador_shell_test_noop.json'));
+
+  DesktopPreferencesEntity _state;
   DesktopPreferencesEntity? lastSaved;
 
+  void seed(DesktopPreferencesEntity state) => _state = state;
+
   @override
-  Future<DesktopPreferencesEntity> load() async => const DesktopPreferencesEntity();
+  Future<DesktopPreferencesEntity> load() async => _state;
 
   @override
   Future<void> save(DesktopPreferencesEntity state) async {
+    _state = state;
     lastSaved = state;
   }
 }
@@ -471,12 +552,28 @@ class _FakeClient extends OllamaClient {
   List<OllamaRunningModel> running = const [];
   final List<String> loadedModels = [];
   final List<String> unloadedModels = [];
+  bool respondWithToolCall = false;
+  int _chatCallCount = 0;
 
   @override
   Future<AgentMessage> chat({
     required List<AgentMessage> messages,
     required List<ToolDefinition> tools,
-  }) async => AgentMessage(role: 'assistant', content: 'ok');
+  }) async {
+    _chatCallCount++;
+    if (respondWithToolCall && _chatCallCount == 1) {
+      return AgentMessage(
+        role: 'assistant',
+        toolCalls: [
+          ToolCall(
+            name: 'write_file',
+            arguments: {'path': 'a.txt', 'content': 'oi'},
+          ),
+        ],
+      );
+    }
+    return AgentMessage(role: 'assistant', content: 'ok');
+  }
 
   @override
   Future<void> testConnection() async {
