@@ -110,30 +110,47 @@ class WorkspaceTopBar extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  if (!compact) ...[
-                    const _LogoMark(),
-                    const SizedBox(width: 10),
-                  ],
+                  Row(
+                    children: [
+                      if (!compact) ...[
+                        const _LogoMark(),
+                        const SizedBox(width: 10),
+                      ],
+                      FolderMenu(state: workspaceState, cubit: workspaceCubit),
+                    ],
+                  ),
                   Expanded(
-                    child: FolderMenu(
-                      state: workspaceState,
-                      cubit: workspaceCubit,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        // color: Colors.red.withValues(alpha: .4),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        spacing: 10,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              border: Border.all(color: line),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: ModelMenu(
+                              state: workspaceState,
+                              cubit: workspaceCubit,
+                            ),
+                          ),
+                          // const SizedBox(width: 8),
+                          StartStopButton(
+                            state: workspaceState,
+                            cubit: workspaceCubit,
+                            iconOnly: veryCompact,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: ModelMenu(
-                      state: workspaceState,
-                      cubit: workspaceCubit,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  StartStopButton(
-                    state: workspaceState,
-                    cubit: workspaceCubit,
-                    iconOnly: veryCompact,
-                  ),
-                  const Spacer(),
+
                   BlocBuilder<ChatCubit, ChatState>(
                     builder: (context, chatState) {
                       final chatCubit = context.read<ChatCubit>();

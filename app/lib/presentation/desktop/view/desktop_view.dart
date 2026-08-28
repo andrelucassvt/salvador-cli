@@ -168,6 +168,24 @@ class _ShellScreenState extends State<_ShellScreen> {
       await SystemNavigator.pop();
       return;
     }
+    final workspace = _workspaceCubit.state;
+    if (workspace is WorkspaceReady &&
+        workspace.modelState == WorkspaceModelState.stopped &&
+        workspace.selectedModel != null &&
+        !workspace.connecting) {
+      await _workspaceCubit.startModel();
+      final afterStart = _workspaceCubit.state;
+      if (afterStart is! WorkspaceReady ||
+          afterStart.modelState != WorkspaceModelState.running) {
+        // Falha ao iniciar: o banner de erro ja mostra o motivo e o texto
+        // digitado fica no composer para nova tentativa.
+        return;
+      }
+      // A View e a dona da sincronizacao de readiness: afirma que o modelo
+      // acabou de entrar em execucao sem depender da ordem de entrega do
+      // BlocListener (que pode chegar depois desta chamada).
+      _chatCubit.updateReadiness(true);
+    }
     _promptController.clear();
     await _chatCubit.send(text);
     if (mounted) _promptFocus.requestFocus();
@@ -278,7 +296,8 @@ class _ShellScreenState extends State<_ShellScreen> {
               final ready = state as WorkspaceReady;
               _chatCubit.updateReadiness(
                 !ready.connecting &&
-                    ready.modelState == WorkspaceModelState.running,
+                    ready.selectedModel != null &&
+                    ready.modelState != WorkspaceModelState.starting,
               );
             },
           ),
@@ -445,7 +464,8 @@ class _ShellScreenState extends State<_ShellScreen> {
   bool _isReadyToSend(WorkspaceState state) =>
       state is WorkspaceReady &&
       !state.connecting &&
-      state.modelState == WorkspaceModelState.running;
+      state.selectedModel != null &&
+      state.modelState != WorkspaceModelState.starting;
 
   String? _errorMessage(WorkspaceReady state) {
     final error = state.error;

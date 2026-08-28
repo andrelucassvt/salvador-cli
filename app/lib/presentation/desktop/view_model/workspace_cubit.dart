@@ -87,33 +87,20 @@ class WorkspaceCubit extends Cubit<WorkspaceState> {
     final current = state;
     if (current is! WorkspaceReady) return;
     if (model == null || model == current.selectedModel) return;
+    // Selecionar nao inicia o modelo: o estado deriva dos modelos ja em
+    // execucao; o start acontece so pelo botao ou ao enviar uma mensagem.
+    final running = current.runningModels.any((runningModel) =>
+        runningModel.name == model);
     emit(
       current.copyWith(
-        modelState: WorkspaceModelState.starting,
+        selectedModel: model,
+        modelState: running
+            ? WorkspaceModelState.running
+            : WorkspaceModelState.stopped,
         clearError: true,
       ),
     );
-    final result = await _ollamaRepository.loadModel(
-      host: current.host,
-      model: model,
-      keepAlive: current.inference.keepAlive ?? _defaultKeepAlive,
-    );
-    switch (result) {
-      case Error(:final error):
-        emit(
-          (state as WorkspaceReady).copyWith(
-            modelState: WorkspaceModelState.stopped,
-            errorKind: WorkspaceErrorKind.modelLoadFailed,
-            error: error,
-          ),
-        );
-        return;
-      case Ok():
-        break;
-    }
-    emit((state as WorkspaceReady).copyWith(selectedModel: model));
     await _persist();
-    await _refreshRunningModels();
   }
 
   Future<void> startModel() async {

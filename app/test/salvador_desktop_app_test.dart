@@ -202,8 +202,33 @@ void main() {
     await tester.pumpAndSettle();
     final state = harness.workspaceCubit.state as WorkspaceReady;
     expect(state.selectedModel, 'gemma2:2b');
+    expect(state.modelState, WorkspaceModelState.stopped);
+    expect(harness.fake.loadedModels, isEmpty);
+  });
+
+  testWidgets('enviar mensagem inicia modelo parado e envia', (tester) async {
+    tester.view.physicalSize = const Size(1100, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    final harness = await buildHarness(tester);
+    await pumpShell(tester);
+    expect(
+      (harness.workspaceCubit.state as WorkspaceReady).modelState,
+      WorkspaceModelState.stopped,
+    );
+    expect(find.text('Iniciar modelo'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('composer-field')),
+      'revise o projeto',
+    );
+    await tester.tap(find.byKey(const Key('send-button')));
+    await tester.pumpAndSettle();
+
+    final state = harness.workspaceCubit.state as WorkspaceReady;
     expect(state.modelState, WorkspaceModelState.running);
-    expect(harness.fake.loadedModels, ['gemma2:2b']);
+    expect(harness.fake.loadedModels, ['llama3.2:3b']);
+    expect((harness.chatCubit.state as ChatIdle).messages, hasLength(2));
   });
 
   testWidgets('modal testa servidor, mantem edicao apos falha e salva', (

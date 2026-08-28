@@ -97,11 +97,7 @@ class FolderMenu extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 3),
-              const Icon(
-                Icons.arrow_drop_down_rounded,
-                size: 17,
-                color: muted,
-              ),
+              const Icon(Icons.arrow_drop_down_rounded, size: 17, color: muted),
             ],
           ),
         ),

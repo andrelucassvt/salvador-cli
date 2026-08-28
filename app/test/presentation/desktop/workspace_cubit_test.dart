@@ -103,6 +103,82 @@ void main() {
     );
   });
 
+  group('WorkspaceCubit.selectModel', () {
+    blocTest<WorkspaceCubit, WorkspaceState>(
+      'selectModel_onlySelectsWithoutLoadingModel',
+      build: buildCubit,
+      seed: () => WorkspaceReady(
+        host: Uri.parse('http://127.0.0.1:11434'),
+        root: root,
+        models: const [
+          OllamaModelInfo(name: 'llama3.2:3b'),
+          OllamaModelInfo(name: 'gemma2:2b'),
+        ],
+        selectedModel: 'llama3.2:3b',
+      ),
+      act: (cubit) => cubit.selectModel('gemma2:2b'),
+      expect: () => [
+        isA<WorkspaceReady>()
+            .having((s) => s.selectedModel, 'selectedModel', 'gemma2:2b')
+            .having(
+              (s) => s.modelState,
+              'modelState',
+              WorkspaceModelState.stopped,
+            ),
+      ],
+      verify: (_) {
+        expect(fakeOllama.loadModelCallCount, 0);
+        expect(fakeStorage.saveCallCount, greaterThan(0));
+        expect(fakeStorage.lastSaved!.model, 'gemma2:2b');
+      },
+    );
+
+    blocTest<WorkspaceCubit, WorkspaceState>(
+      'selectModel_whenModelAlreadyRunning_derivesRunningState',
+      build: buildCubit,
+      seed: () => WorkspaceReady(
+        host: Uri.parse('http://127.0.0.1:11434'),
+        root: root,
+        models: const [
+          OllamaModelInfo(name: 'llama3.2:3b'),
+          OllamaModelInfo(name: 'gemma2:2b'),
+        ],
+        runningModels: const [
+          OllamaRunningModel(name: 'gemma2:2b', isInstalled: true),
+        ],
+        selectedModel: 'llama3.2:3b',
+      ),
+      act: (cubit) => cubit.selectModel('gemma2:2b'),
+      expect: () => [
+        isA<WorkspaceReady>()
+            .having((s) => s.selectedModel, 'selectedModel', 'gemma2:2b')
+            .having(
+              (s) => s.modelState,
+              'modelState',
+              WorkspaceModelState.running,
+            ),
+      ],
+      verify: (_) => expect(fakeOllama.loadModelCallCount, 0),
+    );
+
+    blocTest<WorkspaceCubit, WorkspaceState>(
+      'selectModel_whenSameModel_doesNothing',
+      build: buildCubit,
+      seed: () => WorkspaceReady(
+        host: Uri.parse('http://127.0.0.1:11434'),
+        root: root,
+        models: const [OllamaModelInfo(name: 'llama3.2:3b')],
+        selectedModel: 'llama3.2:3b',
+      ),
+      act: (cubit) => cubit.selectModel('llama3.2:3b'),
+      expect: () => [],
+      verify: (_) {
+        expect(fakeOllama.loadModelCallCount, 0);
+        expect(fakeStorage.saveCallCount, 0);
+      },
+    );
+  });
+
   group('WorkspaceCubit.startModel/stopModel', () {
     blocTest<WorkspaceCubit, WorkspaceState>(
       'startModel_emitsStartingBeforeRunning',

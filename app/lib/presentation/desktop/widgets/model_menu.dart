@@ -14,7 +14,9 @@ class ModelMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final selected = state.selectedModel;
-    final isRunning = state.runningModels.any((model) => model.name == selected);
+    final isRunning = state.runningModels.any(
+      (model) => model.name == selected,
+    );
     return MenuAnchor(
       menuChildren: [
         ConstrainedBox(
@@ -99,11 +101,7 @@ class ModelMenu extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 3),
-              const Icon(
-                Icons.arrow_drop_down_rounded,
-                size: 17,
-                color: muted,
-              ),
+              const Icon(Icons.arrow_drop_down_rounded, size: 17, color: muted),
             ],
           ),
         ),
