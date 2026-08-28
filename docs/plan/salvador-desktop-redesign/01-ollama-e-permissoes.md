@@ -60,17 +60,17 @@
 
 ### Fase 5 — Integridade da parte
 
-- [ ] Rodar `dart format lib/src/models.dart lib/src/ollama_client.dart lib/src/tools.dart lib/src/agent.dart test/ollama_client_test.dart test/salvador_cli_test.dart`.
-- [ ] Rodar `dart analyze` e `dart test` a partir da raiz.
-- [ ] Rodar `cd app && flutter analyze && flutter test` para confirmar compatibilidade dos contratos públicos com o frontend existente.
-- [ ] Checkpoint: commit das mudanças da parte + resumo curto do que ficou pronto, seguindo direto para a parte 2.
+- [x] Rodar `dart format lib/src/models.dart lib/src/ollama_client.dart lib/src/tools.dart lib/src/agent.dart test/ollama_client_test.dart test/salvador_cli_test.dart`.
+- [x] Rodar `dart analyze` e `dart test` a partir da raiz.
+- [x] Rodar `cd app && flutter analyze && flutter test` para confirmar compatibilidade dos contratos públicos com o frontend existente.
+- [x] Checkpoint: commit das mudanças da parte + resumo curto do que ficou pronto, seguindo direto para a parte 2.
 
 ## Critérios de Sucesso
 
-- [ ] Modelos instalados e carregados são representados por dados tipados e testados.
-- [ ] O cliente carrega/descarrega modelos e aplica contexto, temperatura, timeout e keep-alive.
-- [ ] Edição e execução de comandos podem ser removidas das ferramentas expostas ao modelo.
-- [ ] `dart analyze`, `dart test`, `flutter analyze` e `flutter test` passam.
+- [x] Modelos instalados e carregados são representados por dados tipados e testados.
+- [x] O cliente carrega/descarrega modelos e aplica contexto, temperatura, timeout e keep-alive.
+- [x] Edição e execução de comandos podem ser removidas das ferramentas expostas ao modelo.
+- [x] `dart analyze`, `dart test`, `flutter analyze` e `flutter test` passam.
 
 ## Riscos e Mitigações
 

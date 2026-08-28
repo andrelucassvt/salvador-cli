@@ -19,10 +19,10 @@ O desktop atual concentra servidor, pasta, modelo e atividade em uma única side
 
 | # | Arquivo | Entrega | Delegável | Depende de | Status |
 |---|---------|---------|-----------|-----------|--------|
-| 1 | `01-ollama-e-permissoes.md` | Cliente Ollama conhece modelos instalados/ativos, controla carga e aplica parâmetros e permissões | não — abre contratos consumidos pelo controlador na parte 2 | — | pendente |
-| 2 | `02-estado-persistente.md` | Preferências, recentes e sessões sobrevivem ao reinício e o controlador expõe todo o estado do novo workspace | não — altera `DesktopController`, que será consumido e novamente integrado nas partes 3 e 4 | 1 | pendente |
-| 3 | `03-topbar-configuracoes-e-atividade.md` | Top bar, modal, seletor de modelo e painel de atividade/sessões funcionam no shell redesenhado | não — compartilha `salvador_desktop_app.dart` com a parte 4 e inclui validação visual manual | 2 | pendente |
-| 4 | `04-arquivos-preview-e-responsividade.md` | Árvore, filtro, preview, rails, composer e estado vazio completam o redesenho | não — envolve UI com validação funcional do usuário e atualização dos mesmos componentes da parte 3 | 3 | pendente |
+| 1 | `01-ollama-e-permissoes.md` | Cliente Ollama conhece modelos instalados/ativos, controla carga e aplica parâmetros e permissões | não — abre contratos consumidos pelo controlador na parte 2 | — | concluída |
+| 2 | `02-estado-persistente.md` | Preferências, recentes e sessões sobrevivem ao reinício e o controlador expõe todo o estado do novo workspace | não — altera `DesktopController`, que será consumido e novamente integrado nas partes 3 e 4 | 1 | concluída |
+| 3 | `03-topbar-configuracoes-e-atividade.md` | Top bar, modal, seletor de modelo e painel de atividade/sessões funcionam no shell redesenhado | não — compartilha `salvador_desktop_app.dart` com a parte 4 e inclui validação visual manual | 2 | concluída |
+| 4 | `04-arquivos-preview-e-responsividade.md` | Árvore, filtro, preview, rails, composer e estado vazio completam o redesenho | não — envolve UI com validação funcional do usuário e atualização dos mesmos componentes da parte 3 | 3 | concluída |
 
 ## Riscos e Mitigações (globais)
 

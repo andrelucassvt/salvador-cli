@@ -75,20 +75,20 @@ O serviço de menções já indexa caminhos, mas não expõe hierarquia, tamanho
 
 ### Fase 6 — Atualizar flows e checkpoint final
 
-- [ ] Invocar a skill `flow` para criar `docs/flow/app-desktop.md`, cobrindo bootstrap → restauração → descoberta do Ollama → top bar/configurações → sessão do agente → atividade → árvore/preview → persistência.
-- [ ] Atualizar `docs/flow/project-structure.md` com `desktop_state_store.dart`, `system_memory.dart`, novos endpoints do Ollama e responsabilidades finais do desktop.
-- [ ] Marcar nos metadados dos flows a revisão contra o commit/estado resultante e relacionar este plano.
-- [ ] Verificar por `rg -n "DesktopStateStore|SystemMemoryReader|api/ps|preview|sessões" docs/flow` que os novos caminhos e regras aparecem na documentação.
-- [ ] Checkpoint: commit das mudanças da parte + resumo final do redesenho concluído.
+- [x] Invocar a skill `flow` para criar `docs/flow/app-desktop.md`, cobrindo bootstrap → restauração → descoberta do Ollama → top bar/configurações → sessão do agente → atividade → árvore/preview → persistência.
+- [x] Atualizar `docs/flow/project-structure.md` com `desktop_state_store.dart`, `system_memory.dart`, novos endpoints do Ollama e responsabilidades finais do desktop.
+- [x] Marcar nos metadados dos flows a revisão contra o commit/estado resultante e relacionar este plano.
+- [x] Verificar por `rg -n "DesktopStateStore|SystemMemoryReader|api/ps|preview|sessões" docs/flow` que os novos caminhos e regras aparecem na documentação.
+- [x] Checkpoint: commit das mudanças da parte + resumo final do redesenho concluído.
 
 ## Critérios de Sucesso
 
-- [ ] Árvore filtrável permanece dentro da raiz e preview trata arquivos inválidos sem crash.
-- [ ] Preview abre/fecha e insere a menção correta no composer.
-- [ ] Os dois painéis alternam entre largura completa e rail sem overflow.
-- [ ] Composer e estado vazio permanecem utilizáveis em janelas estreitas e baixas.
-- [ ] `docs/flow/app-desktop.md` documenta o fluxo implementado e `project-structure.md` está atual.
-- [ ] `dart analyze`, `dart test`, `flutter analyze`, `flutter test` e `git diff --check` passam.
+- [x] Árvore filtrável permanece dentro da raiz e preview trata arquivos inválidos sem crash.
+- [x] Preview abre/fecha e insere a menção correta no composer.
+- [x] Os dois painéis alternam entre largura completa e rail sem overflow.
+- [x] Composer e estado vazio permanecem utilizáveis em janelas estreitas e baixas.
+- [x] `docs/flow/app-desktop.md` documenta o fluxo implementado e `project-structure.md` está atual.
+- [x] `dart analyze`, `dart test`, `flutter analyze`, `flutter test` e `git diff --check` passam.
 - [ ] _(manual — feito pelo usuário)_ Redesign validado no app real conforme a referência visual.
 
 ## Riscos e Mitigações
