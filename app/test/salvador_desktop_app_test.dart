@@ -64,6 +64,9 @@ void main() {
   testWidgets(
     'top bar reflete estados do modelo e aciona start/stop/nova sessão',
     (tester) async {
+      tester.view.physicalSize = const Size(1100, 700);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
       final (controller, fake) = await buildController(tester);
       addTearDown(controller.dispose);
       await pumpShell(tester, controller);
@@ -308,7 +311,6 @@ void main() {
     expect(find.byKey(const Key('new-session-button')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
-
   testWidgets('title bar customizada aparece somente no macOS', (tester) async {
     final (controller, _) = await buildController(tester);
     addTearDown(controller.dispose);
@@ -323,6 +325,127 @@ void main() {
     expect(find.byKey(const Key('mac-title-bar')), findsOneWidget);
     debugDefaultTargetPlatformOverride = null;
   });
+
+  testWidgets('arvore expande, filtra e abre preview com mencao', (
+    tester,
+  ) async {
+    final (controller, _) = await buildController(tester);
+    addTearDown(controller.dispose);
+    await tester.runAsync(() async {
+      await Directory('${controller.root.path}/src').create();
+      await File(
+        '${controller.root.path}/src/main.dart',
+      ).writeAsString('void main() {\n  return;\n}');
+      await File(
+        '${controller.root.path}/README.md',
+      ).writeAsString('# leia-me');
+      await File('${controller.root.path}/imagem.bin').writeAsBytes([0, 1, 2]);
+    });
+    controller.refreshTree();
+    await pumpShell(tester, controller);
+
+    expect(find.byKey(const Key('files-rail')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('expand-files-panel-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('files-panel')), findsOneWidget);
+    expect(find.byKey(const Key('tree-entry-src')), findsOneWidget);
+    expect(find.byKey(const Key('tree-entry-src/main.dart')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('tree-entry-src')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('tree-entry-src/main.dart')), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('file-filter-field')),
+      'readme',
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('tree-entry-src')), findsNothing);
+    expect(find.byKey(const Key('tree-entry-README.md')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('collapse-files-panel-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('expand-files-panel-button')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('tree-entry-README.md')),
+      findsOneWidget,
+      reason: 'filtro deve sobreviver ao recolher/reabrir',
+    );
+
+    await tester.enterText(find.byKey(const Key('file-filter-field')), '');
+    await tester.pumpAndSettle();
+    await tapPreview(tester, find.byKey(const Key('tree-entry-src/main.dart')));
+
+    expect(find.byKey(const Key('preview-pane')), findsOneWidget);
+    expect(find.text('src/main.dart'), findsOneWidget);
+    expect(find.textContaining('linhas'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('mention-preview-button')));
+    await tester.pumpAndSettle();
+    final composer = tester.widget<TextField>(
+      find.byKey(const Key('composer-field')),
+    );
+    expect(composer.controller!.text, '@src/main.dart ');
+
+    await tester.tap(find.byKey(const Key('close-preview-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('preview-pane')), findsNothing);
+
+    await tapPreview(tester, find.byKey(const Key('tree-entry-imagem.bin')));
+    expect(find.byKey(const Key('preview-error-pane')), findsOneWidget);
+    expect(find.textContaining('binario'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('close-preview-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('preview-error-pane')), findsNothing);
+  });
+
+  testWidgets('janela estreita com os dois rails nao gera overflow', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(560, 480);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    final (controller, _) = await buildController(tester);
+    addTearDown(controller.dispose);
+    await pumpShell(tester, controller);
+
+    expect(find.byKey(const Key('activity-rail')), findsOneWidget);
+    expect(find.byKey(const Key('files-rail')), findsOneWidget);
+    expect(find.byKey(const Key('composer-field')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'janela compacta com os dois paineis expandidos nao gera overflow',
+    (tester) async {
+      tester.view.physicalSize = const Size(980, 520);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      final (controller, _) = await buildController(tester);
+      addTearDown(controller.dispose);
+      await pumpShell(tester, controller);
+
+      await tester.tap(find.byKey(const Key('expand-panel-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('expand-files-panel-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('activity-panel')), findsOneWidget);
+      expect(find.byKey(const Key('files-panel')), findsOneWidget);
+      expect(find.byKey(const Key('composer-field')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+}
+
+Future<void> tapPreview(WidgetTester tester, Finder finder) async {
+  await tester.runAsync(() async {
+    await tester.tap(finder);
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+  });
+  await tester.pumpAndSettle();
 }
 
 class _NoIoStore extends DesktopStateStore {

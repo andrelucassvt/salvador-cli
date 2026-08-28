@@ -141,7 +141,17 @@ class ReadFileTool extends WorkspaceTool {
   @override
   Future<String> execute(Map<String, Object?> arguments) async {
     final path = requiredString(arguments, 'path');
-    final content = await resolveFile(path, mayCreate: false).readAsString();
+    final file = resolveFile(path, mayCreate: false);
+    final bytes = await file.readAsBytes();
+    if (bytes.contains(0)) {
+      throw const ToolException('arquivo binario nao pode ser lido');
+    }
+    final String content;
+    try {
+      content = utf8.decode(bytes);
+    } on FormatException {
+      throw const ToolException('arquivo nao esta em UTF-8');
+    }
     if (content.length <= _maxCharacters) return content;
     return '${content.substring(0, _maxCharacters)}\n[TRUNCADO]';
   }

@@ -327,6 +327,224 @@ void main() {
       controller.dispose();
     },
   );
+
+  test(
+    'arvore indexa raiz expandida por padrao, pastas antes de arquivos',
+    () async {
+      final outside = await Directory.systemTemp.createTemp(
+        'salvador_tree_outside_',
+      );
+      addTearDown(() async {
+        if (outside.existsSync()) await outside.delete(recursive: true);
+      });
+      await buildTreeFixture(root, outside);
+      final controller = _treeController(root);
+
+      controller.refreshTree();
+
+      final visible = controller.treeEntries;
+      expect(visible.map((entry) => entry.path), [
+        'src',
+        '.hidden.txt',
+        'README.md',
+      ]);
+      final srcEntry = visible.first;
+      expect(srcEntry.isDirectory, isTrue);
+      expect(srcEntry.expanded, isFalse);
+      expect(
+        controller.treeEntries.any((entry) => entry.path == 'src/main.dart'),
+        isFalse,
+      );
+      controller.dispose();
+    },
+  );
+
+  test(
+    'toggleDirectory expande e recolhe; filtro ignora diferenca de caixa',
+    () async {
+      final outside = await Directory.systemTemp.createTemp(
+        'salvador_tree_outside_',
+      );
+      addTearDown(() async {
+        if (outside.existsSync()) await outside.delete(recursive: true);
+      });
+      await buildTreeFixture(root, outside);
+      final controller = _treeController(root);
+      controller.refreshTree();
+
+      controller.toggleDirectory('src');
+      expect(controller.treeEntries.map((entry) => entry.path), [
+        'src',
+        'src/analise.md',
+        'src/main.dart',
+        '.hidden.txt',
+        'README.md',
+      ]);
+      expect(
+        controller.treeEntries
+            .firstWhere((entry) => entry.path == 'src/main.dart')
+            .sizeBytes,
+        14,
+      );
+
+      controller.toggleDirectory('src');
+      expect(
+        controller.treeEntries.any((entry) => entry.path == 'src/main.dart'),
+        isFalse,
+      );
+
+      controller.setFileFilter('MAIN');
+      expect(controller.treeEntries.map((entry) => entry.path), [
+        'src',
+        'src/main.dart',
+      ]);
+
+      controller.setFileFilter('');
+      expect(controller.treeEntries, hasLength(3));
+      controller.dispose();
+    },
+  );
+
+  test('diretorios ignorados e symlinks nao sao percorridos', () async {
+    final outside = await Directory.systemTemp.createTemp(
+      'salvador_tree_outside_',
+    );
+    addTearDown(() async {
+      if (outside.existsSync()) await outside.delete(recursive: true);
+    });
+    await File('${outside.path}/alvo.txt').writeAsString('fora');
+    await buildTreeFixture(root, outside);
+    final controller = _treeController(root);
+    controller.refreshTree();
+
+    controller.setFileFilter('out.txt');
+    expect(controller.treeEntries, isEmpty);
+    controller.setFileFilter('config');
+    expect(controller.treeEntries, isEmpty);
+    controller.setFileFilter('link-fora');
+    expect(controller.treeEntries, isEmpty);
+    controller.dispose();
+  });
+
+  test('openPreview le UTF-8 com metadados e retorna erros claros', () async {
+    final outside = await Directory.systemTemp.createTemp(
+      'salvador_tree_outside_',
+    );
+    addTearDown(() async {
+      if (outside.existsSync()) await outside.delete(recursive: true);
+    });
+    await buildTreeFixture(root, outside);
+    await File('${root.path}/big.txt').writeAsString('a' * 101000);
+    final controller = _treeController(root);
+    controller.refreshTree();
+
+    expect(await controller.openPreview('src/main.dart'), isNull);
+    final preview = controller.preview!;
+    expect(preview.path, 'src/main.dart');
+    expect(preview.language, 'dart');
+    expect(preview.lineCount, 1);
+    expect(preview.sizeBytes, 14);
+    expect(preview.content, contains('void main'));
+
+    expect(
+      await controller.openPreview('ausente.txt'),
+      contains('arquivo nao encontrado'),
+    );
+    expect(controller.preview, isNull);
+
+    expect(
+      await controller.openPreview('../escape.txt'),
+      contains('fora da raiz'),
+    );
+    expect(await controller.openPreview('build/out.txt'), contains('binario'));
+
+    expect(await controller.openPreview('big.txt'), isNull);
+    expect(controller.preview!.content, endsWith('[TRUNCADO]'));
+
+    controller.closePreview();
+    expect(controller.preview, isNull);
+    controller.dispose();
+  });
+
+  test('openPreview responde com ERRO para arquivo sem permissao', () async {
+    if (Platform.isWindows) return;
+    final outside = await Directory.systemTemp.createTemp(
+      'salvador_tree_outside_',
+    );
+    addTearDown(() async {
+      if (outside.existsSync()) await outside.delete(recursive: true);
+    });
+    final locked = File('${root.path}/locked.txt');
+    await locked.writeAsString('secreto');
+    await Process.run('chmod', ['000', locked.path]);
+    addTearDown(() => Process.run('chmod', ['644', locked.path]));
+    final controller = _treeController(root);
+
+    final error = await controller.openPreview('locked.txt');
+
+    expect(error, startsWith('ERRO:'));
+    expect(controller.preview, isNull);
+    controller.dispose();
+  });
+
+  test(
+    'preview insere mencao com codificacao existente para espacos',
+    () async {
+      final outside = await Directory.systemTemp.createTemp(
+        'salvador_tree_outside_',
+      );
+      addTearDown(() async {
+        if (outside.existsSync()) await outside.delete(recursive: true);
+      });
+      await Directory('${root.path}/pasta a').create();
+      await File('${root.path}/pasta a/nota.txt').writeAsString('oi');
+      final controller = _treeController(root);
+      controller.refreshTree();
+
+      await controller.openPreview('pasta a/nota.txt');
+      expect(
+        controller.mentionPreviewedFile('revise ', 7),
+        'revise @"pasta a/nota.txt" ',
+      );
+
+      controller.toggleDirectory('pasta a');
+      final entry = controller.treeEntries.firstWhere(
+        (candidate) => candidate.path == 'pasta a/nota.txt',
+      );
+      expect(entry.selected, isTrue);
+      controller.dispose();
+    },
+  );
+}
+
+DesktopController _treeController(Directory root) => DesktopController(
+  initialRoot: root,
+  store: _TreeNoIoStore(),
+  clientFactory: ({required model, required baseUrl, required options}) =>
+      FakeOllamaClient(model: model, baseUrl: baseUrl),
+);
+
+class _TreeNoIoStore extends DesktopStateStore {
+  _TreeNoIoStore() : super(file: File('/tmp/salvador_tree_noop.json'));
+
+  @override
+  Future<DesktopPersistedState> load() async => const DesktopPersistedState();
+
+  @override
+  Future<void> save(DesktopPersistedState state) async {}
+}
+
+Future<void> buildTreeFixture(Directory root, Directory outside) async {
+  await Directory('${root.path}/src').create();
+  await File('${root.path}/src/main.dart').writeAsString('void main() {}');
+  await File('${root.path}/src/analise.md').writeAsString('# Analise');
+  await File('${root.path}/README.md').writeAsString('leia-me');
+  await File('${root.path}/.hidden.txt').writeAsString('oculto');
+  await Directory('${root.path}/build').create();
+  await File('${root.path}/build/out.txt').writeAsBytes([0, 1, 2]);
+  await Directory('${root.path}/.git').create();
+  await File('${root.path}/.git/config').writeAsString('x');
+  await Link('${root.path}/link-fora').create('${outside.path}/alvo.txt');
 }
 
 class FakeOllamaClient extends OllamaClient {

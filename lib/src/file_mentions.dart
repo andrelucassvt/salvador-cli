@@ -30,7 +30,8 @@ class FileMentionService {
   final int maxFileBytes;
   List<String>? _cachedPaths;
 
-  static const _ignoredDirectories = {
+  /// Diretorios que nao entram na indexacao nem no painel de arquivos.
+  static const ignoredDirectories = {
     '.git',
     '.dart_tool',
     '.idea',
@@ -139,7 +140,7 @@ class FileMentionService {
         final relative = prefix.isEmpty ? name : '$prefix/$name';
         if (entry is File) {
           paths.add(relative);
-        } else if (entry is Directory && !_ignoredDirectories.contains(name)) {
+        } else if (entry is Directory && !ignoredDirectories.contains(name)) {
           visit(entry, relative);
         }
       }

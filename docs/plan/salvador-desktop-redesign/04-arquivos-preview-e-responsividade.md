@@ -28,50 +28,50 @@ O serviço de menções já indexa caminhos, mas não expõe hierarquia, tamanho
 
 > Os testes vão falhar inicialmente — isso é intencional.
 
-- [ ] Ampliar `app/test/desktop_controller_test.dart` com uma raiz temporária contendo pastas, arquivos, ocultos, ignorados e symlink para fora.
-- [ ] Testar raiz expandida por padrão, ordenação pasta-antes-de-arquivo, tamanhos, toggles de diretório e filtro por caminho/nome sem diferença de caixa.
-- [ ] Testar que diretórios ignorados e symlinks não são percorridos e que preview fora da raiz retorna erro apresentável.
-- [ ] Testar preview de UTF-8 com metadados/linhas e respostas claras para binário, arquivo grande, removido ou sem permissão.
-- [ ] Adicionar em `test/salvador_cli_test.dart` casos de `read_file` com byte NUL e UTF-8 inválido, esperando `ERRO:` sem exceção propagada.
-- [ ] Testar que “Mencionar com @” insere o caminho selecionado no composer usando a codificação existente para espaços.
-- [ ] Verificação: `dart test test/salvador_cli_test.dart` e `cd app && flutter test test/desktop_controller_test.dart` compilam e falham somente pelos novos contratos.
+- [x] Ampliar `app/test/desktop_controller_test.dart` com uma raiz temporária contendo pastas, arquivos, ocultos, ignorados e symlink para fora.
+- [x] Testar raiz expandida por padrão, ordenação pasta-antes-de-arquivo, tamanhos, toggles de diretório e filtro por caminho/nome sem diferença de caixa.
+- [x] Testar que diretórios ignorados e symlinks não são percorridos e que preview fora da raiz retorna erro apresentável.
+- [x] Testar preview de UTF-8 com metadados/linhas e respostas claras para binário, arquivo grande, removido ou sem permissão.
+- [x] Adicionar em `test/salvador_cli_test.dart` casos de `read_file` com byte NUL e UTF-8 inválido, esperando `ERRO:` sem exceção propagada.
+- [x] Testar que “Mencionar com @” insere o caminho selecionado no composer usando a codificação existente para espaços.
+- [x] Verificação: `dart test test/salvador_cli_test.dart` e `cd app && flutter test test/desktop_controller_test.dart` compilam e falham somente pelos novos contratos.
 
 ### Fase 2 — Implementação da árvore e do preview
 
-- [ ] Criar em `app/lib/src/desktop/desktop_controller.dart` o modelo imutável `WorkspaceTreeEntry` com caminho relativo, profundidade, tipo, expansão, tamanho e seleção.
-- [ ] Tornar `FileMentionService.ignoredDirectories` público em `lib/src/file_mentions.dart` e indexar a raiz no controlador com `Directory.list(followLinks: false)`, sem atravessar links simbólicos.
-- [ ] Alterar `ReadFileTool.execute` em `lib/src/tools.dart` para decodificar bytes explicitamente e devolver `ERRO:` via `ToolException` para binário/UTF-8 inválido, preservando o limite de 100.000 caracteres.
-- [ ] Criar no `DesktopController` um `ToolRegistry` privado com `AgentPermissions.readOnly` e ler o preview por `execute(ToolCall(name: 'read_file', ...))`, reutilizando `WorkspaceTool.resolveFile` sem abrir `File(path)` direto.
-- [ ] Expor no controlador `toggleDirectory`, `setFileFilter`, `openPreview`, `closePreview` e `mentionPreviewedFile`, atualizando a árvore após troca de raiz.
-- [ ] Calcular linguagem/extensão, linhas, tamanho e conteúdo renderizável sem ultrapassar os limites já definidos para leitura/menção.
-- [ ] Verificação: `dart test test/salvador_cli_test.dart` e `cd app && flutter test test/desktop_controller_test.dart` passam.
+- [x] Criar em `app/lib/src/desktop/desktop_controller.dart` o modelo imutável `WorkspaceTreeEntry` com caminho relativo, profundidade, tipo, expansão, tamanho e seleção.
+- [x] Tornar `FileMentionService.ignoredDirectories` público em `lib/src/file_mentions.dart` e indexar a raiz no controlador com `Directory.list(followLinks: false)`, sem atravessar links simbólicos.
+- [x] Alterar `ReadFileTool.execute` em `lib/src/tools.dart` para decodificar bytes explicitamente e devolver `ERRO:` via `ToolException` para binário/UTF-8 inválido, preservando o limite de 100.000 caracteres.
+- [x] Criar no `DesktopController` um `ToolRegistry` privado com `AgentPermissions.readOnly` e ler o preview por `execute(ToolCall(name: 'read_file', ...))`, reutilizando `WorkspaceTool.resolveFile` sem abrir `File(path)` direto.
+- [x] Expor no controlador `toggleDirectory`, `setFileFilter`, `openPreview`, `closePreview` e `mentionPreviewedFile`, atualizando a árvore após troca de raiz.
+- [x] Calcular linguagem/extensão, linhas, tamanho e conteúdo renderizável sem ultrapassar os limites já definidos para leitura/menção.
+- [x] Verificação: `dart test test/salvador_cli_test.dart` e `cd app && flutter test test/desktop_controller_test.dart` passam.
 
 ### Fase 3 — Painel direito e preview central
 
-- [ ] Adicionar em `app/lib/src/desktop/salvador_desktop_app.dart` painel direito claro de 290 px com header, contador, filtro, árvore indentada e rodapé de escopo.
-- [ ] Implementar pastas expandíveis e arquivos selecionáveis com estados visuais, tamanho, scroll e raiz aberta por padrão.
-- [ ] Implementar rail direito de 50 px com expandir, arquivos e busca, preservando o estado do filtro ao recolher/reabrir.
-- [ ] Alternar a área central entre chat/estado vazio e preview com header, metadados, “Mencionar com @”, fechar e corpo numerado selecionável.
-- [ ] Aplicar destaque leve determinístico por spans para palavras-chave e tags conhecidas, mantendo fallback de texto puro para extensões desconhecidas.
-- [ ] Verificação: `cd app && flutter analyze` passa e chaves dos estados árvore/preview/rail estão presentes para os widget tests.
+- [x] Adicionar em `app/lib/src/desktop/salvador_desktop_app.dart` painel direito claro de 290 px com header, contador, filtro, árvore indentada e rodapé de escopo.
+- [x] Implementar pastas expandíveis e arquivos selecionáveis com estados visuais, tamanho, scroll e raiz aberta por padrão.
+- [x] Implementar rail direito de 50 px com expandir, arquivos e busca, preservando o estado do filtro ao recolher/reabrir.
+- [x] Alternar a área central entre chat/estado vazio e preview com header, metadados, “Mencionar com @”, fechar e corpo numerado selecionável.
+- [x] Aplicar destaque leve determinístico por spans para palavras-chave e tags conhecidas, mantendo fallback de texto puro para extensões desconhecidas.
+- [x] Verificação: `cd app && flutter analyze` passa e chaves dos estados árvore/preview/rail estão presentes para os widget tests.
 
 ### Fase 4 — Composer, estado vazio e widget tests
 
-- [ ] Reestruturar `_Composer` em `app/lib/src/desktop/salvador_desktop_app.dart` com card de 12 px, textarea de 62 px e ações em `Wrap`, mantendo o botão enviar com largura fixa.
-- [ ] Ajustar atalho para `⌘/Ctrl + Enter`, preservando quebra de linha normal e desabilitando envio durante loading/sending.
-- [ ] Ajustar `_EmptyState` para região rolável com filhos não expansíveis, pasta ativa no subtítulo e ações “Entender o projeto”/“Revisar um arquivo”.
-- [ ] Ampliar `app/test/salvador_desktop_app_test.dart` para árvore expandida/filtrada, seleção/fechamento do preview, menção, rails e erros de arquivo.
-- [ ] Adicionar widget tests com largura e altura reduzidas que falhem em qualquer overflow do composer, estado vazio ou combinação dos dois rails.
-- [ ] Verificação: `cd app && flutter test test/salvador_desktop_app_test.dart` passa sem app, janela ou device.
+- [x] Reestruturar `_Composer` em `app/lib/src/desktop/salvador_desktop_app.dart` com card de 12 px, textarea de 62 px e ações em `Wrap`, mantendo o botão enviar com largura fixa.
+- [x] Ajustar atalho para `⌘/Ctrl + Enter`, preservando quebra de linha normal e desabilitando envio durante loading/sending.
+- [x] Ajustar `_EmptyState` para região rolável com filhos não expansíveis, pasta ativa no subtítulo e ações “Entender o projeto”/“Revisar um arquivo”.
+- [x] Ampliar `app/test/salvador_desktop_app_test.dart` para árvore expandida/filtrada, seleção/fechamento do preview, menção, rails e erros de arquivo.
+- [x] Adicionar widget tests com largura e altura reduzidas que falhem em qualquer overflow do composer, estado vazio ou combinação dos dois rails.
+- [x] Verificação: `cd app && flutter test test/salvador_desktop_app_test.dart` passa sem app, janela ou device.
 
 ### Fase 5 — Verificação automatizada completa
 
-- [ ] Rodar `dart format lib/src/file_mentions.dart lib/src/tools.dart test/salvador_cli_test.dart app/lib/src/desktop/desktop_controller.dart app/lib/src/desktop/salvador_desktop_app.dart app/test/desktop_controller_test.dart app/test/salvador_desktop_app_test.dart`.
-- [ ] Rodar `dart analyze` e `dart test` na raiz.
-- [ ] Rodar `cd app && flutter analyze && flutter test`.
-- [ ] Rodar `git diff --check` e confirmar que nenhum arquivo em `app/macos/`, `app/linux/` ou `app/windows/` foi editado manualmente.
-- [ ] Registrar para validação manual do usuário: fidelidade visual, picker, menus, carga/descarga real, modal, persistência após reinício, rails, filtro, preview e atalhos.
-- [ ] Verificação: todos os quatro comandos de análise/teste terminam com exit code 0 e a lista manual fica no handoff final.
+- [x] Rodar `dart format lib/src/file_mentions.dart lib/src/tools.dart test/salvador_cli_test.dart app/lib/src/desktop/desktop_controller.dart app/lib/src/desktop/salvador_desktop_app.dart app/test/desktop_controller_test.dart app/test/salvador_desktop_app_test.dart`.
+- [x] Rodar `dart analyze` e `dart test` na raiz.
+- [x] Rodar `cd app && flutter analyze && flutter test`.
+- [x] Rodar `git diff --check` e confirmar que nenhum arquivo em `app/macos/`, `app/linux/` ou `app/windows/` foi editado manualmente.
+- [x] Registrar para validação manual do usuário: fidelidade visual, picker, menus, carga/descarga real, modal, persistência após reinício, rails, filtro, preview e atalhos.
+- [x] Verificação: todos os quatro comandos de análise/teste terminam com exit code 0 e a lista manual fica no handoff final.
 
 ### Fase 6 — Atualizar flows e checkpoint final
 

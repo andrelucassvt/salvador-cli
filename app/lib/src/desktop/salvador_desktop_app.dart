@@ -20,6 +20,7 @@ const _line = Color(0xFFDDE2DE);
 const _titleBarHeight = 38.0;
 const _topBarHeight = 62.0;
 const _panelWidth = 286.0;
+const _filesPanelWidth = 290.0;
 const _railWidth = 50.0;
 
 class SalvadorDesktopApp extends StatelessWidget {
@@ -127,9 +128,11 @@ class _ShellScreenState extends State<_ShellScreen> {
   final _promptController = TextEditingController();
   final _promptFocus = FocusNode();
   final _scrollController = ScrollController();
+  final _filterController = TextEditingController();
   List<String> _suggestions = const [];
   int _messageCount = 0;
   bool _panelExpanded = false;
+  bool _rightPanelExpanded = false;
 
   @override
   void initState() {
@@ -152,6 +155,7 @@ class _ShellScreenState extends State<_ShellScreen> {
     _promptController.dispose();
     _promptFocus.dispose();
     _scrollController.dispose();
+    _filterController.dispose();
     super.dispose();
   }
 
@@ -220,6 +224,20 @@ class _ShellScreenState extends State<_ShellScreen> {
     _promptFocus.requestFocus();
   }
 
+  void _mentionPreviewed() {
+    final value = _promptController.value;
+    final cursor = value.selection.isValid
+        ? value.selection.extentOffset
+        : value.text.length;
+    final newText = _controller.mentionPreviewedFile(value.text, cursor);
+    if (newText == value.text) return;
+    _promptController.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: newText.length),
+    );
+    _promptFocus.requestFocus();
+  }
+
   Future<void> _openSettings() async {
     await showDialog<void>(
       context: context,
@@ -254,6 +272,25 @@ class _ShellScreenState extends State<_ShellScreen> {
                     ),
                   ),
                 Expanded(child: _buildWorkspace()),
+                if (_rightPanelExpanded)
+                  SizedBox(
+                    width: _filesPanelWidth,
+                    child: _FilesPanel(
+                      controller: _controller,
+                      filterController: _filterController,
+                      onCollapse: () =>
+                          setState(() => _rightPanelExpanded = false),
+                    ),
+                  )
+                else
+                  SizedBox(
+                    width: _railWidth,
+                    child: _FilesRail(
+                      controller: _controller,
+                      onExpand: () =>
+                          setState(() => _rightPanelExpanded = true),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -271,35 +308,7 @@ class _ShellScreenState extends State<_ShellScreen> {
         ),
         if (_controller.connectionError != null)
           _ErrorBanner(message: _controller.connectionError!),
-        Expanded(
-          child: _controller.messages.isEmpty
-              ? _EmptyState(
-                  ready:
-                      _controller.connectionState ==
-                      OllamaConnectionState.ready,
-                  rootPath: _controller.root.path,
-                  onPrompt: (text) {
-                    _promptController.text = text;
-                    _promptController.selection = TextSelection.collapsed(
-                      offset: text.length,
-                    );
-                    _promptFocus.requestFocus();
-                  },
-                )
-              : ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.fromLTRB(28, 30, 28, 18),
-                  itemCount:
-                      _controller.messages.length +
-                      (_controller.isSending ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index == _controller.messages.length) {
-                      return const _ThinkingCard();
-                    }
-                    return _MessageCard(entry: _controller.messages[index]);
-                  },
-                ),
-        ),
+        Expanded(child: _buildCenter()),
         _Composer(
           controller: _promptController,
           focusNode: _promptFocus,
@@ -313,6 +322,48 @@ class _ShellScreenState extends State<_ShellScreen> {
           onSend: _send,
         ),
       ],
+    );
+  }
+
+  Widget _buildCenter() {
+    final preview = _controller.preview;
+    if (preview != null) {
+      return _PreviewPane(
+        preview: preview,
+        onMention: _mentionPreviewed,
+        onClose: _controller.closePreview,
+      );
+    }
+    final previewError = _controller.previewError;
+    if (previewError != null) {
+      return _PreviewErrorPane(
+        message: previewError,
+        onClose: _controller.closePreview,
+      );
+    }
+    if (_controller.messages.isEmpty) {
+      return _EmptyState(
+        ready: _controller.connectionState == OllamaConnectionState.ready,
+        rootPath: _controller.root.path,
+        onPrompt: (text) {
+          _promptController.text = text;
+          _promptController.selection = TextSelection.collapsed(
+            offset: text.length,
+          );
+          _promptFocus.requestFocus();
+        },
+      );
+    }
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.fromLTRB(28, 30, 28, 18),
+      itemCount: _controller.messages.length + (_controller.isSending ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index == _controller.messages.length) {
+          return const _ThinkingCard();
+        }
+        return _MessageCard(entry: _controller.messages[index]);
+      },
     );
   }
 }
@@ -371,7 +422,7 @@ class _WorkspaceTopBar extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 960;
-        final veryCompact = constraints.maxWidth < 700;
+        final veryCompact = constraints.maxWidth < 780;
         return Container(
           key: const Key('workspace-top-bar'),
           height: _topBarHeight,
@@ -1373,6 +1424,700 @@ class _SliderSetting extends StatelessWidget {
   }
 }
 
+class _FilesPanel extends StatelessWidget {
+  const _FilesPanel({
+    required this.controller,
+    required this.filterController,
+    required this.onCollapse,
+  });
+
+  final DesktopController controller;
+  final TextEditingController filterController;
+  final VoidCallback onCollapse;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('files-panel'),
+      decoration: const BoxDecoration(
+        color: _shell,
+        border: Border(left: BorderSide(color: _line)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 10, 6),
+            child: Row(
+              children: [
+                const Text(
+                  'ARQUIVOS',
+                  style: TextStyle(
+                    color: _muted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE7F2F3),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Text(
+                    '${controller.treeEntries.length}',
+                    style: const TextStyle(
+                      color: _ocean,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  key: const Key('collapse-files-panel-button'),
+                  tooltip: 'Recolher painel de arquivos',
+                  onPressed: onCollapse,
+                  icon: const Icon(
+                    Icons.menu_open_rounded,
+                    color: _muted,
+                    size: 19,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+            child: TextField(
+              key: const Key('file-filter-field'),
+              controller: filterController,
+              onChanged: controller.setFileFilter,
+              style: const TextStyle(
+                fontSize: 12,
+                fontFamily: 'JetBrains Mono',
+              ),
+              decoration: const InputDecoration(
+                hintText: 'Filtrar arquivos…',
+                prefixIcon: Icon(Icons.search_rounded, size: 17),
+                isDense: true,
+              ),
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: controller.treeEntries.isEmpty
+                ? const Center(
+                    child: Text(
+                      'Nenhum arquivo corresponde ao filtro.',
+                      style: TextStyle(color: _muted, fontSize: 11),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    itemCount: controller.treeEntries.length,
+                    itemBuilder: (context, index) => _TreeRow(
+                      entry: controller.treeEntries[index],
+                      onToggleDirectory: controller.toggleDirectory,
+                      onOpenFile: controller.openPreview,
+                    ),
+                  ),
+          ),
+          const Divider(height: 1),
+          Padding(
+            key: const Key('files-scope-footer'),
+            padding: const EdgeInsets.fromLTRB(14, 9, 14, 12),
+            child: Row(
+              children: [
+                const Icon(Icons.lock_outline_rounded, size: 13, color: _muted),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    controller.root.path,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _muted,
+                      fontSize: 10,
+                      fontFamily: 'JetBrains Mono',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TreeRow extends StatelessWidget {
+  const _TreeRow({
+    required this.entry,
+    required this.onToggleDirectory,
+    required this.onOpenFile,
+  });
+
+  final WorkspaceTreeEntry entry;
+  final ValueChanged<String> onToggleDirectory;
+  final Future<String?> Function(String path) onOpenFile;
+
+  @override
+  Widget build(BuildContext context) {
+    final indent = 10.0 + entry.depth * 14.0;
+    return InkWell(
+      key: Key('tree-entry-${entry.path}'),
+      onTap: () => entry.isDirectory
+          ? onToggleDirectory(entry.path)
+          : onOpenFile(entry.path),
+      child: Container(
+        padding: EdgeInsets.fromLTRB(indent, 6, 12, 6),
+        color: entry.selected ? const Color(0xFFE7F2F3) : Colors.transparent,
+        child: Row(
+          children: [
+            Icon(
+              entry.isDirectory
+                  ? entry.expanded
+                        ? Icons.folder_open_rounded
+                        : Icons.folder_rounded
+                  : Icons.description_outlined,
+              size: 15,
+              color: entry.isDirectory ? _ocean : _muted,
+            ),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Text(
+                entry.path.split('/').last,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: entry.selected ? _ocean : _ink,
+                  fontSize: 11.5,
+                  fontFamily: 'JetBrains Mono',
+                  fontWeight: entry.isDirectory || entry.selected
+                      ? FontWeight.w600
+                      : FontWeight.w400,
+                ),
+              ),
+            ),
+            if (!entry.isDirectory) ...[
+              const SizedBox(width: 6),
+              Text(
+                _formatBytes(entry.sizeBytes),
+                style: const TextStyle(
+                  color: _muted,
+                  fontSize: 9,
+                  fontFamily: 'JetBrains Mono',
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FilesRail extends StatelessWidget {
+  const _FilesRail({required this.controller, required this.onExpand});
+
+  final DesktopController controller;
+  final VoidCallback onExpand;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('files-rail'),
+      decoration: const BoxDecoration(
+        color: _shell,
+        border: Border(left: BorderSide(color: _line)),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 12),
+          IconButton(
+            key: const Key('expand-files-panel-button'),
+            tooltip: 'Expandir painel de arquivos',
+            onPressed: onExpand,
+            icon: const Icon(
+              Icons.chevron_left_rounded,
+              color: _muted,
+              size: 20,
+            ),
+          ),
+          const SizedBox(height: 10),
+          IconButton(
+            key: const Key('right-rail-files-button'),
+            tooltip: 'Arquivos',
+            onPressed: onExpand,
+            icon: const Icon(Icons.folder_outlined, color: _muted, size: 18),
+          ),
+          const SizedBox(height: 8),
+          IconButton(
+            key: const Key('right-rail-search-button'),
+            tooltip: 'Buscar arquivos',
+            onPressed: onExpand,
+            icon: const Icon(Icons.search_rounded, color: _muted, size: 18),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewPane extends StatelessWidget {
+  const _PreviewPane({
+    required this.preview,
+    required this.onMention,
+    required this.onClose,
+  });
+
+  final FilePreview preview;
+  final VoidCallback onMention;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = preview.content.split('\n');
+    return Column(
+      key: const Key('preview-pane'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(20, 10, 12, 10),
+          decoration: const BoxDecoration(
+            color: _paper,
+            border: Border(bottom: BorderSide(color: _line)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE7F2F3),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  preview.language.toUpperCase(),
+                  style: const TextStyle(
+                    color: _ocean,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: .8,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  preview.path,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _ink,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'JetBrains Mono',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                '${preview.lineCount} linhas · ${_formatBytes(preview.sizeBytes)}',
+                style: const TextStyle(
+                  color: _muted,
+                  fontSize: 10.5,
+                  fontFamily: 'JetBrains Mono',
+                ),
+              ),
+              const SizedBox(width: 10),
+              OutlinedButton.icon(
+                key: const Key('mention-preview-button'),
+                onPressed: onMention,
+                icon: const Icon(Icons.alternate_email_rounded, size: 15),
+                label: const Text('Mencionar com @'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _ocean,
+                  side: const BorderSide(color: _line),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                key: const Key('close-preview-button'),
+                tooltip: 'Fechar preview',
+                onPressed: onClose,
+                icon: const Icon(Icons.close_rounded, size: 18),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            itemCount: lines.length,
+            itemBuilder: (context, index) => _PreviewLine(
+              number: index + 1,
+              line: lines[index],
+              language: preview.language,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PreviewLine extends StatelessWidget {
+  const _PreviewLine({
+    required this.number,
+    required this.line,
+    required this.language,
+  });
+
+  final int number;
+  final String line;
+  final String language;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 52,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 2, right: 8),
+            child: Text(
+              '$number',
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                color: _line,
+                fontSize: 11,
+                height: 1.5,
+                fontFamily: 'JetBrains Mono',
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+        ),
+        Expanded(
+          child: SelectableText.rich(
+            TextSpan(
+              children: _highlightLine(line, language),
+              style: const TextStyle(
+                color: _ink,
+                fontSize: 12,
+                height: 1.5,
+                fontFamily: 'JetBrains Mono',
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PreviewErrorPane extends StatelessWidget {
+  const _PreviewErrorPane({required this.message, required this.onClose});
+
+  final String message;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      key: const Key('preview-error-pane'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(20, 10, 12, 10),
+          decoration: const BoxDecoration(
+            color: _paper,
+            border: Border(bottom: BorderSide(color: _line)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.error_outline_rounded, color: _coral, size: 18),
+              const SizedBox(width: 8),
+              const Text(
+                'Não foi possível abrir o preview',
+                style: TextStyle(
+                  color: _ink,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                key: const Key('close-preview-button'),
+                tooltip: 'Fechar',
+                onPressed: onClose,
+                icon: const Icon(Icons.close_rounded, size: 18),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: Text(
+            message,
+            style: const TextStyle(
+              color: _ink,
+              fontSize: 12.5,
+              fontFamily: 'JetBrains Mono',
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+const _keywordStyles = TextStyle(color: _ocean, fontWeight: FontWeight.w700);
+const _commentStyle = TextStyle(color: Color(0xFF7BA05B));
+const _stringStyle = TextStyle(color: Color(0xFFB4632F));
+const _numberStyle = TextStyle(color: Color(0xFF8A6BB8));
+
+const _keywordsByLanguage = <String, Set<String>>{
+  'dart': {
+    'async',
+    'await',
+    'class',
+    'const',
+    'else',
+    'extends',
+    'final',
+    'for',
+    'if',
+    'import',
+    'new',
+    'return',
+    'var',
+    'void',
+    'while',
+  },
+  'yaml': {'false', 'null', 'true'},
+  'json': {'false', 'null', 'true'},
+  'shell': {
+    'do',
+    'done',
+    'echo',
+    'elif',
+    'else',
+    'export',
+    'fi',
+    'for',
+    'if',
+    'then',
+  },
+  'python': {
+    'None',
+    'True',
+    'False',
+    'class',
+    'def',
+    'elif',
+    'else',
+    'for',
+    'if',
+    'import',
+    'in',
+    'return',
+    'while',
+  },
+  'javascript': {
+    'async',
+    'await',
+    'class',
+    'const',
+    'else',
+    'export',
+    'for',
+    'function',
+    'if',
+    'import',
+    'let',
+    'new',
+    'return',
+    'var',
+    'while',
+  },
+  'typescript': {
+    'async',
+    'await',
+    'class',
+    'const',
+    'else',
+    'export',
+    'for',
+    'function',
+    'if',
+    'import',
+    'interface',
+    'let',
+    'new',
+    'return',
+    'type',
+    'var',
+    'while',
+  },
+  'c': {
+    'const',
+    'else',
+    'for',
+    'if',
+    'int',
+    'return',
+    'struct',
+    'void',
+    'while',
+  },
+  'cpp': {
+    'class',
+    'const',
+    'else',
+    'for',
+    'if',
+    'int',
+    'return',
+    'struct',
+    'template',
+    'void',
+    'while',
+  },
+  'java': {
+    'class',
+    'else',
+    'extends',
+    'final',
+    'for',
+    'if',
+    'import',
+    'int',
+    'new',
+    'private',
+    'public',
+    'return',
+    'static',
+    'void',
+    'while',
+  },
+  'kotlin': {
+    'class',
+    'else',
+    'for',
+    'fun',
+    'if',
+    'import',
+    'return',
+    'val',
+    'var',
+    'when',
+    'while',
+  },
+  'go': {
+    'break',
+    'case',
+    'const',
+    'else',
+    'for',
+    'func',
+    'go',
+    'if',
+    'import',
+    'package',
+    'return',
+    'struct',
+    'type',
+    'var',
+  },
+  'rust': {
+    'as',
+    'else',
+    'enum',
+    'fn',
+    'for',
+    'if',
+    'impl',
+    'in',
+    'let',
+    'loop',
+    'match',
+    'mod',
+    'move',
+    'mut',
+    'pub',
+    'return',
+    'struct',
+    'use',
+    'while',
+  },
+  'swift': {
+    'class',
+    'else',
+    'enum',
+    'extension',
+    'for',
+    'func',
+    'if',
+    'import',
+    'in',
+    'let',
+    'return',
+    'struct',
+    'var',
+    'while',
+  },
+};
+
+List<TextSpan> _highlightLine(String line, String language) {
+  final keywords = _keywordsByLanguage[language];
+  if (keywords == null || line.isEmpty) {
+    return [TextSpan(text: line)];
+  }
+  final spans = <TextSpan>[];
+  final pattern = RegExp(
+    r'''("[^"]*"|'[^']*'|//[^\n]*|#[^\n]*|\b\d+(?:\.\d+)?\b|[A-Za-z_][A-Za-z0-9_]*)''',
+  );
+  var last = 0;
+  for (final match in pattern.allMatches(line)) {
+    if (match.start > last) {
+      spans.add(TextSpan(text: line.substring(last, match.start)));
+    }
+    final token = match.group(0)!;
+    final TextStyle? style;
+    if (token.startsWith('//') || token.startsWith('#')) {
+      style = _commentStyle;
+    } else if (token.startsWith('"') || token.startsWith("'")) {
+      style = _stringStyle;
+    } else if (RegExp(r'^\d').hasMatch(token)) {
+      style = _numberStyle;
+    } else if (keywords.contains(token)) {
+      style = _keywordStyles;
+    } else {
+      style = null;
+    }
+    spans.add(TextSpan(text: token, style: style));
+    last = match.end;
+  }
+  if (last < line.length) {
+    spans.add(TextSpan(text: line.substring(last)));
+  }
+  return spans;
+}
+
 class _ActivityPanel extends StatelessWidget {
   const _ActivityPanel({required this.controller, required this.onCollapse});
 
@@ -1755,11 +2500,11 @@ class _Composer extends StatelessWidget {
                   ),
                 ),
               Container(
-                padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+                padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
                 decoration: BoxDecoration(
                   color: _paper,
                   border: Border.all(color: ready ? _line : _coral),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(12),
                   boxShadow: const [
                     BoxShadow(
                       color: Color(0x12082C40),
@@ -1769,41 +2514,53 @@ class _Composer extends StatelessWidget {
                   ],
                 ),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Focus(
-                      onKeyEvent: (_, event) {
-                        final shiftPressed =
-                            HardwareKeyboard.instance.isShiftPressed;
-                        if (event is KeyDownEvent &&
-                            event.logicalKey == LogicalKeyboardKey.enter &&
-                            !shiftPressed) {
-                          onSend();
-                          return KeyEventResult.handled;
-                        }
-                        return KeyEventResult.ignored;
-                      },
-                      child: TextField(
-                        key: const Key('composer-field'),
-                        controller: controller,
-                        focusNode: focusNode,
-                        minLines: 2,
-                        maxLines: 6,
-                        enabled: !sending,
-                        style: const TextStyle(
-                          color: _ink,
-                          fontSize: 14,
-                          height: 1.45,
-                        ),
-                        decoration: InputDecoration.collapsed(
-                          hintText: ready
-                              ? 'Peça uma alteração ou mencione um arquivo com @…'
-                              : 'Conecte ao Ollama e inicie o modelo para começar…',
-                          hintStyle: const TextStyle(color: _muted),
+                    SizedBox(
+                      height: 62,
+                      child: Focus(
+                        onKeyEvent: (_, event) {
+                          final metaPressed =
+                              HardwareKeyboard.instance.isMetaPressed;
+                          final controlPressed =
+                              HardwareKeyboard.instance.isControlPressed;
+                          if (event is KeyDownEvent &&
+                              event.logicalKey == LogicalKeyboardKey.enter &&
+                              (metaPressed || controlPressed)) {
+                            onSend();
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        },
+                        child: TextField(
+                          key: const Key('composer-field'),
+                          controller: controller,
+                          focusNode: focusNode,
+                          expands: true,
+                          maxLines: null,
+                          minLines: null,
+                          textAlignVertical: TextAlignVertical.top,
+                          enabled: !sending,
+                          style: const TextStyle(
+                            color: _ink,
+                            fontSize: 14,
+                            height: 1.45,
+                          ),
+                          decoration: InputDecoration.collapsed(
+                            hintText: ready
+                                ? 'Peça uma alteração ou mencione um arquivo com @…'
+                                : 'Conecte ao Ollama e inicie o modelo para começar…',
+                            hintStyle: const TextStyle(color: _muted),
+                          ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Row(
+                    const SizedBox(height: 6),
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 12,
+                      runSpacing: 8,
                       children: [
                         TextButton.icon(
                           onPressed: sending ? null : onMention,
@@ -1813,15 +2570,10 @@ class _Composer extends StatelessWidget {
                           ),
                           label: const Text('Arquivo'),
                         ),
-                        const SizedBox(width: 8),
-                        const Expanded(
-                          child: Text(
-                            'Enter para enviar · Shift+Enter para quebrar linha',
-                            textAlign: TextAlign.right,
-                            style: TextStyle(color: _muted, fontSize: 10),
-                          ),
+                        const Text(
+                          '⌘/Ctrl+Enter para enviar · Enter para quebrar linha',
+                          style: TextStyle(color: _muted, fontSize: 10),
                         ),
-                        const SizedBox(width: 12),
                         FilledButton(
                           key: const Key('send-button'),
                           onPressed: sending || !ready ? null : onSend,
@@ -1875,6 +2627,7 @@ class _EmptyState extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 620),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
                 width: 66,

@@ -192,6 +192,32 @@ void main() {
     },
   );
 
+  test('read_file rejeita arquivo binario com ERRO sem excecao', () async {
+    await File(
+      '${root.path}/imagem.dat',
+    ).writeAsBytes([0x50, 0x4B, 0x00, 0x01]);
+    final registry = ToolRegistry(root);
+
+    final result = await registry.execute(
+      ToolCall(name: 'read_file', arguments: {'path': 'imagem.dat'}),
+    );
+
+    expect(result, startsWith('ERRO:'));
+    expect(result, contains('binario'));
+  });
+
+  test('read_file rejeita UTF-8 invalido com ERRO sem excecao', () async {
+    await File('${root.path}/latin1.txt').writeAsBytes([0xC3, 0x28, 0x41]);
+    final registry = ToolRegistry(root);
+
+    final result = await registry.execute(
+      ToolCall(name: 'read_file', arguments: {'path': 'latin1.txt'}),
+    );
+
+    expect(result, startsWith('ERRO:'));
+    expect(result, contains('UTF-8'));
+  });
+
   test(
     'observador de conclusao recebe chamada e resultado, inclusive ERRO',
     () async {
