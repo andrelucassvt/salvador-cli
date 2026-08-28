@@ -1,7 +1,18 @@
-import 'package:flutter/widgets.dart';
-import 'package:salvador_desktop/src/desktop/salvador_desktop_app.dart';
+import 'dart:io';
 
-void main() {
+import 'package:flutter/material.dart';
+import 'package:salvador_desktop/src/desktop/salvador_desktop_app.dart';
+import 'package:window_manager/window_manager.dart';
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (Platform.isMacOS) {
+    await windowManager.ensureInitialized();
+    const options = WindowOptions(titleBarStyle: TitleBarStyle.hidden);
+    await windowManager.waitUntilReadyToShow(options, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
+  }
   runApp(const SalvadorDesktopApp());
 }

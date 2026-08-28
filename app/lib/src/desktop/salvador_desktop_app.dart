@@ -1,10 +1,11 @@
-import 'dart:io';
-
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:salvador_cli/salvador_cli.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'desktop_controller.dart';
+import 'desktop_state_store.dart';
 
 const _navy = Color(0xFF103B54);
 const _deepNavy = Color(0xFF082C40);
@@ -16,8 +17,15 @@ const _ink = Color(0xFF172A33);
 const _muted = Color(0xFF687980);
 const _line = Color(0xFFDDE2DE);
 
+const _titleBarHeight = 38.0;
+const _topBarHeight = 62.0;
+const _panelWidth = 286.0;
+const _railWidth = 50.0;
+
 class SalvadorDesktopApp extends StatelessWidget {
-  const SalvadorDesktopApp({super.key});
+  const SalvadorDesktopApp({super.key, this.controller});
+
+  final DesktopController? controller;
 
   @override
   Widget build(BuildContext context) {
@@ -33,8 +41,27 @@ class SalvadorDesktopApp extends StatelessWidget {
         useMaterial3: true,
         colorScheme: scheme,
         scaffoldBackgroundColor: _shell,
-        fontFamily: Platform.isMacOS ? 'Avenir Next' : 'Segoe UI',
+        fontFamily: 'Archivo',
         dividerColor: _line,
+        dialogTheme: DialogThemeData(
+          backgroundColor: _paper,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        menuTheme: MenuThemeData(
+          style: MenuStyle(
+            backgroundColor: WidgetStatePropertyAll(_paper),
+            surfaceTintColor: WidgetStatePropertyAll(Colors.transparent),
+            elevation: WidgetStatePropertyAll(8),
+            shape: WidgetStatePropertyAll(
+              RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: const BorderSide(color: _line),
+              ),
+            ),
+          ),
+        ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: _paper,
@@ -52,49 +79,76 @@ class SalvadorDesktopApp extends StatelessWidget {
             borderSide: const BorderSide(color: _ocean, width: 1.5),
           ),
         ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            backgroundColor: _ocean,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(9),
+            ),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            foregroundColor: _ocean,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(9),
+            ),
+          ),
+        ),
+        switchTheme: SwitchThemeData(
+          trackColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected) ? _ocean : null,
+          ),
+          thumbColor: WidgetStateProperty.resolveWith(
+            (states) =>
+                states.contains(WidgetState.selected) ? Colors.white : null,
+          ),
+        ),
+        dividerTheme: const DividerThemeData(color: _line, thickness: 1),
       ),
-      home: const _WorkspaceScreen(),
+      home: _ShellScreen(controller: controller),
     );
   }
 }
 
-class _WorkspaceScreen extends StatefulWidget {
-  const _WorkspaceScreen();
+class _ShellScreen extends StatefulWidget {
+  const _ShellScreen({this.controller});
+
+  final DesktopController? controller;
 
   @override
-  State<_WorkspaceScreen> createState() => _WorkspaceScreenState();
+  State<_ShellScreen> createState() => _ShellScreenState();
 }
 
-class _WorkspaceScreenState extends State<_WorkspaceScreen> {
+class _ShellScreenState extends State<_ShellScreen> {
   late final DesktopController _controller;
-  late final TextEditingController _hostController;
-  late final TextEditingController _rootController;
+  late final bool _ownsController;
   final _promptController = TextEditingController();
   final _promptFocus = FocusNode();
   final _scrollController = ScrollController();
   List<String> _suggestions = const [];
   int _messageCount = 0;
+  bool _panelExpanded = false;
 
   @override
   void initState() {
     super.initState();
-    _controller = DesktopController();
-    _hostController = TextEditingController(text: _controller.host.toString());
-    _rootController = TextEditingController(text: _controller.root.path);
+    _ownsController = widget.controller == null;
+    _controller = widget.controller ?? DesktopController();
     _controller.addListener(_handleControllerChange);
     _promptController.addListener(_updateSuggestions);
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _controller.initialize(),
-    );
+    if (_ownsController) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _controller.initialize();
+      });
+    }
   }
 
   @override
   void dispose() {
-    _controller
-      ..removeListener(_handleControllerChange)
-      ..dispose();
-    _hostController.dispose();
-    _rootController.dispose();
+    _controller.removeListener(_handleControllerChange);
+    if (_ownsController) _controller.dispose();
     _promptController.dispose();
     _promptFocus.dispose();
     _scrollController.dispose();
@@ -166,103 +220,1171 @@ class _WorkspaceScreenState extends State<_WorkspaceScreen> {
     _promptFocus.requestFocus();
   }
 
-  Future<void> _chooseRoot() async {
-    final selected = await showDialog<String>(
+  Future<void> _openSettings() async {
+    await showDialog<void>(
       context: context,
-      builder: (_) => _DirectoryPicker(initialPath: _rootController.text),
-    );
-    if (selected != null) _rootController.text = selected;
-  }
-
-  Future<void> _connect() => _controller.refreshConnection(
-    hostText: _hostController.text,
-    rootPath: _rootController.text,
-  );
-
-  Future<void> _showSettings() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: _paper,
-      builder: (context) => SafeArea(
-        child: SizedBox(
-          height: MediaQuery.sizeOf(context).height * .82,
-          child: _SessionPanel(
-            controller: _controller,
-            hostController: _hostController,
-            rootController: _rootController,
-            onChooseRoot: _chooseRoot,
-            onConnect: () async {
-              await _connect();
-              if (context.mounted &&
-                  _controller.connectionState == OllamaConnectionState.ready) {
-                Navigator.pop(context);
-              }
-            },
-          ),
-        ),
-      ),
+      builder: (_) => _SettingsDialog(controller: _controller),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final showSidebar = constraints.maxWidth >= 980;
-          return Row(
-            children: [
-              if (showSidebar)
-                SizedBox(
-                  width: 306,
-                  child: _SessionPanel(
-                    controller: _controller,
-                    hostController: _hostController,
-                    rootController: _rootController,
-                    onChooseRoot: _chooseRoot,
-                    onConnect: _connect,
+      body: Column(
+        children: [
+          const _MacTitleBar(),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_panelExpanded)
+                  SizedBox(
+                    width: _panelWidth,
+                    child: _ActivityPanel(
+                      controller: _controller,
+                      onCollapse: () => setState(() => _panelExpanded = false),
+                    ),
+                  )
+                else
+                  SizedBox(
+                    width: _railWidth,
+                    child: _ActivityRail(
+                      controller: _controller,
+                      onExpand: () => setState(() => _panelExpanded = true),
+                    ),
                   ),
+                Expanded(child: _buildWorkspace()),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWorkspace() {
+    return Column(
+      children: [
+        _WorkspaceTopBar(
+          controller: _controller,
+          onOpenSettings: _openSettings,
+        ),
+        if (_controller.connectionError != null)
+          _ErrorBanner(message: _controller.connectionError!),
+        Expanded(
+          child: _controller.messages.isEmpty
+              ? _EmptyState(
+                  ready:
+                      _controller.connectionState ==
+                      OllamaConnectionState.ready,
+                  rootPath: _controller.root.path,
+                  onPrompt: (text) {
+                    _promptController.text = text;
+                    _promptController.selection = TextSelection.collapsed(
+                      offset: text.length,
+                    );
+                    _promptFocus.requestFocus();
+                  },
+                )
+              : ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.fromLTRB(28, 30, 28, 18),
+                  itemCount:
+                      _controller.messages.length +
+                      (_controller.isSending ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == _controller.messages.length) {
+                      return const _ThinkingCard();
+                    }
+                    return _MessageCard(entry: _controller.messages[index]);
+                  },
                 ),
-              Expanded(
-                child: _ChatWorkspace(
-                  controller: _controller,
-                  promptController: _promptController,
-                  promptFocus: _promptFocus,
-                  scrollController: _scrollController,
-                  suggestions: _suggestions,
-                  onSuggestion: _insertSuggestion,
-                  onMention: _startMention,
-                  onSend: _send,
-                  onShowSettings: showSidebar ? null : _showSettings,
-                ),
-              ),
-            ],
-          );
+        ),
+        _Composer(
+          controller: _promptController,
+          focusNode: _promptFocus,
+          suggestions: _suggestions,
+          sending: _controller.isSending,
+          ready:
+              _controller.connectionState == OllamaConnectionState.ready &&
+              _controller.modelState == ModelRunState.running,
+          onSuggestion: _insertSuggestion,
+          onMention: _startMention,
+          onSend: _send,
+        ),
+      ],
+    );
+  }
+}
+
+class _MacTitleBar extends StatelessWidget {
+  const _MacTitleBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final isMac = Theme.of(context).platform == TargetPlatform.macOS;
+    if (!isMac) return const SizedBox.shrink();
+    return SizedBox(
+      key: const Key('mac-title-bar'),
+      height: _titleBarHeight,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onPanStart: (_) => windowManager.startDragging(),
+        onDoubleTap: () async {
+          final maximized = await windowManager.isMaximized();
+          if (maximized) {
+            await windowManager.unmaximize();
+          } else {
+            await windowManager.maximize();
+          }
         },
+        child: Container(
+          color: _deepNavy,
+          padding: const EdgeInsets.only(left: 78, right: 16),
+          alignment: Alignment.centerLeft,
+          child: const Text(
+            'SALVADOR',
+            style: TextStyle(
+              color: Colors.white38,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 2,
+            ),
+          ),
+        ),
       ),
     );
   }
 }
 
-class _SessionPanel extends StatelessWidget {
-  const _SessionPanel({
+class _WorkspaceTopBar extends StatelessWidget {
+  const _WorkspaceTopBar({
     required this.controller,
-    required this.hostController,
-    required this.rootController,
-    required this.onChooseRoot,
-    required this.onConnect,
+    required this.onOpenSettings,
   });
 
   final DesktopController controller;
-  final TextEditingController hostController;
-  final TextEditingController rootController;
-  final VoidCallback onChooseRoot;
-  final Future<void> Function() onConnect;
+  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 960;
+        final veryCompact = constraints.maxWidth < 700;
+        return Container(
+          key: const Key('workspace-top-bar'),
+          height: _topBarHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: const BoxDecoration(
+            color: _paper,
+            border: Border(bottom: BorderSide(color: _line)),
+          ),
+          child: Row(
+            children: [
+              if (!compact) ...[const _LogoMark(), const SizedBox(width: 10)],
+              Expanded(child: _FolderMenu(controller: controller)),
+              const SizedBox(width: 6),
+              Expanded(child: _ModelMenu(controller: controller)),
+              const SizedBox(width: 8),
+              _StartStopButton(controller: controller, iconOnly: veryCompact),
+              const Spacer(),
+              if (veryCompact)
+                IconButton(
+                  key: const Key('new-session-button'),
+                  tooltip: 'Nova sessão',
+                  onPressed: controller.messages.isEmpty
+                      ? null
+                      : () => controller.newSession(),
+                  icon: const Icon(Icons.add_comment_outlined, size: 18),
+                )
+              else
+                TextButton.icon(
+                  key: const Key('new-session-button'),
+                  onPressed: controller.messages.isEmpty
+                      ? null
+                      : () => controller.newSession(),
+                  icon: const Icon(Icons.add_comment_outlined, size: 17),
+                  label: const Text('Nova sessão'),
+                ),
+              const SizedBox(width: 4),
+              IconButton(
+                key: const Key('open-settings-button'),
+                tooltip: 'Configurações',
+                onPressed: onOpenSettings,
+                icon: const Icon(Icons.tune_rounded, size: 19),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _LogoMark extends StatelessWidget {
+  const _LogoMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: const BoxDecoration(
+            color: _coral,
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.chevron_right_rounded,
+            color: Colors.white,
+            size: 21,
+          ),
+        ),
+        const SizedBox(width: 8),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 120) return const SizedBox.shrink();
+            return const Text(
+              'SALVADOR',
+              style: TextStyle(
+                color: _navy,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.6,
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _FolderMenu extends StatelessWidget {
+  const _FolderMenu({required this.controller});
+
+  final DesktopController controller;
+
+  String get _shortPath {
+    final parts = controller.root.path
+        .split(RegExp(r'[/\\]'))
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (parts.length <= 2) return controller.root.path;
+    return '…/${parts.sublist(parts.length - 2).join('/')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final recents = controller.recentRoots;
+    return MenuAnchor(
+      menuChildren: [
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                child: Text(
+                  'Pasta do projeto',
+                  style: TextStyle(
+                    color: _ink.withValues(alpha: .55),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              ...recents.map(
+                (path) => _FolderMenuItem(
+                  path: path,
+                  active: path == controller.root.path,
+                  onTap: () => controller.selectRoot(path),
+                ),
+              ),
+              if (recents.isNotEmpty) const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+                child: MenuItemButton(
+                  onPressed: () async {
+                    final selected = await getDirectoryPath(
+                      initialDirectory: controller.root.path,
+                      confirmButtonText: 'Usar esta pasta',
+                    );
+                    if (selected != null) await controller.selectRoot(selected);
+                  },
+                  leadingIcon: const Icon(
+                    Icons.folder_open_rounded,
+                    size: 18,
+                    color: _ocean,
+                  ),
+                  child: const Text('Escolher outra pasta…'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+      builder: (context, menuController, _) => InkWell(
+        key: const Key('folder-menu'),
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => menuController.isOpen
+            ? menuController.close()
+            : menuController.open(),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.folder_outlined, size: 16, color: _muted),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  _shortPath,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _ink,
+                    fontSize: 12,
+                    fontFamily: 'JetBrains Mono',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 3),
+              const Icon(
+                Icons.arrow_drop_down_rounded,
+                size: 17,
+                color: _muted,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FolderMenuItem extends StatelessWidget {
+  const _FolderMenuItem({
+    required this.path,
+    required this.active,
+    required this.onTap,
+  });
+
+  final String path;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        child: Row(
+          children: [
+            Icon(
+              active
+                  ? Icons.check_circle_rounded
+                  : Icons.radio_button_unchecked_rounded,
+              size: 15,
+              color: active ? _ocean : _line,
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                path,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontFamily: 'JetBrains Mono',
+                  color: active ? _ink : _muted,
+                  fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ModelMenu extends StatelessWidget {
+  const _ModelMenu({required this.controller});
+
+  final DesktopController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = controller.selectedModel;
+    final running = controller.runningModels
+        .where((model) => model.name == selected)
+        .toList();
+    final isRunning = running.isNotEmpty;
+    return MenuAnchor(
+      menuChildren: [
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 380),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ...controller.models.map(
+                (model) => _ModelMenuItem(
+                  model: model,
+                  selected: model.name == selected,
+                  running: controller.runningModels.any(
+                    (runningModel) => runningModel.name == model.name,
+                  ),
+                  knownVram: controller.runningModels
+                      .where((runningModel) => runningModel.name == model.name)
+                      .map((runningModel) => runningModel.sizeVramBytes)
+                      .where((bytes) => bytes > 0)
+                      .fold<int?>(null, (_, bytes) => bytes),
+                  contextFuture: model.name == selected
+                      ? controller.fetchModelContext(model.name)
+                      : null,
+                  onTap: () => controller.selectModel(model.name),
+                ),
+              ),
+              const Divider(height: 1),
+              FutureBuilder<int?>(
+                future: controller.availableMemory(),
+                builder: (context, snapshot) {
+                  final bytes = snapshot.data;
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+                    child: Text(
+                      bytes == null
+                          ? 'RAM livre do sistema: indisponível'
+                          : 'RAM livre do sistema: ${_formatBytes(bytes)}',
+                      style: const TextStyle(
+                        color: _muted,
+                        fontSize: 11,
+                        fontFamily: 'JetBrains Mono',
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
+      builder: (context, menuController, _) => InkWell(
+        key: const Key('model-menu'),
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => menuController.isOpen
+            ? menuController.close()
+            : menuController.open(),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: isRunning ? const Color(0xFF7BD8B0) : _line,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  selected ?? 'Sem modelo',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _ink,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'JetBrains Mono',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 3),
+              const Icon(
+                Icons.arrow_drop_down_rounded,
+                size: 17,
+                color: _muted,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ModelMenuItem extends StatelessWidget {
+  const _ModelMenuItem({
+    required this.model,
+    required this.selected,
+    required this.running,
+    required this.knownVram,
+    required this.contextFuture,
+    required this.onTap,
+  });
+
+  final OllamaModelInfo model;
+  final bool selected;
+  final bool running;
+  final int? knownVram;
+  final Future<int?>? contextFuture;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      key: Key('model-item-${model.name}'),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          children: [
+            Icon(
+              selected
+                  ? Icons.check_circle_rounded
+                  : Icons.radio_button_unchecked_rounded,
+              size: 15,
+              color: selected ? _ocean : _line,
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    model.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: _ink,
+                      fontSize: 12.5,
+                      fontFamily: 'JetBrains Mono',
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      _StatusPill(running: running),
+                      const SizedBox(width: 7),
+                      Flexible(
+                        child: Text(
+                          '${_formatBytes(model.sizeBytes)} · ${model.quantization ?? model.family ?? 'peso desconhecido'}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: _muted,
+                            fontSize: 10,
+                            fontFamily: 'JetBrains Mono',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (contextFuture != null)
+                    FutureBuilder<int?>(
+                      future: contextFuture,
+                      builder: (context, snapshot) {
+                        final contextLength = snapshot.data;
+                        if (contextLength == null) {
+                          return const SizedBox.shrink();
+                        }
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: Text(
+                            'contexto: $contextLength tokens',
+                            style: const TextStyle(
+                              color: _muted,
+                              fontSize: 10,
+                              fontFamily: 'JetBrains Mono',
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                ],
+              ),
+            ),
+            if (knownVram != null)
+              Text(
+                '${_formatBytes(knownVram!)} em VRAM',
+                style: const TextStyle(
+                  color: _muted,
+                  fontSize: 10,
+                  fontFamily: 'JetBrains Mono',
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.running});
+
+  final bool running;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: running ? const Color(0xFFE2F5EC) : const Color(0xFFEFF2F0),
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Text(
+        running ? 'CARREGADO' : 'PARADO',
+        style: TextStyle(
+          color: running ? const Color(0xFF2E7D57) : _muted,
+          fontSize: 8.5,
+          fontWeight: FontWeight.w700,
+          letterSpacing: .6,
+        ),
+      ),
+    );
+  }
+}
+
+class _StartStopButton extends StatelessWidget {
+  const _StartStopButton({required this.controller, this.iconOnly = false});
+
+  final DesktopController controller;
+  final bool iconOnly;
+
+  @override
+  Widget build(BuildContext context) {
+    final starting = controller.modelState == ModelRunState.starting;
+    final running = controller.modelState == ModelRunState.running;
+    final busy = starting || controller.isSending;
+    final enabled =
+        controller.connectionState == OllamaConnectionState.ready &&
+        controller.selectedModel != null &&
+        !busy;
+
+    final Widget content;
+    if (starting) {
+      content = const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox.square(
+            dimension: 14,
+            child: CircularProgressIndicator(strokeWidth: 2, color: _ocean),
+          ),
+          SizedBox(width: 8),
+          Text('Aguarde…'),
+        ],
+      );
+    } else if (running) {
+      content = const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.stop_rounded, size: 16),
+          SizedBox(width: 6),
+          Text('Encerrar modelo'),
+        ],
+      );
+    } else {
+      content = const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.play_arrow_rounded, size: 17),
+          SizedBox(width: 4),
+          Text('Iniciar modelo'),
+        ],
+      );
+    }
+
+    if (iconOnly) {
+      return Tooltip(
+        message: running ? 'Encerrar modelo' : 'Iniciar modelo',
+        child: OutlinedButton(
+          key: const Key('start-stop-button'),
+          onPressed: enabled
+              ? () => running ? controller.stopModel() : controller.startModel()
+              : null,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: _navy,
+            side: const BorderSide(color: _line),
+            padding: const EdgeInsets.all(9),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(9),
+            ),
+          ),
+          child: starting
+              ? const SizedBox.square(
+                  dimension: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: _ocean,
+                  ),
+                )
+              : Icon(running ? Icons.stop_rounded : Icons.play_arrow_rounded),
+        ),
+      );
+    }
+
+    return OutlinedButton(
+      key: const Key('start-stop-button'),
+      onPressed: enabled
+          ? () => running ? controller.stopModel() : controller.startModel()
+          : null,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: _navy,
+        side: const BorderSide(color: _line),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+      ),
+      child: content,
+    );
+  }
+}
+
+class _SettingsDialog extends StatefulWidget {
+  const _SettingsDialog({required this.controller});
+
+  final DesktopController controller;
+
+  @override
+  State<_SettingsDialog> createState() => _SettingsDialogState();
+}
+
+class _SettingsDialogState extends State<_SettingsDialog> {
+  late final TextEditingController _hostController;
+  late final TextEditingController _contextController;
+  late double _temperature;
+  Duration? _keepAlive;
+  Duration? _timeout;
+  late bool _allowEdit;
+  late bool _allowCommands;
+  bool _testing = false;
+  bool _saving = false;
+  HostTestResult? _testResult;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final controller = widget.controller;
+    _hostController = TextEditingController(text: controller.host.toString());
+    _contextController = TextEditingController(
+      text: controller.contextLength?.toString() ?? '',
+    );
+    _temperature = controller.temperature;
+    _keepAlive = controller.keepAlive;
+    _timeout = controller.timeout;
+    _allowEdit = controller.allowEdit;
+    _allowCommands = controller.allowCommands;
+  }
+
+  @override
+  void dispose() {
+    _hostController.dispose();
+    _contextController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _test() async {
+    setState(() {
+      _testing = true;
+      _testResult = null;
+      _error = null;
+    });
+    final result = await widget.controller.testHost(_hostController.text);
+    if (!mounted) return;
+    setState(() {
+      _testing = false;
+      _testResult = result;
+    });
+  }
+
+  Future<void> _save() async {
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.controller.saveSettings(
+        hostText: _hostController.text,
+        temperature: _temperature,
+        contextLength: int.tryParse(_contextController.text.trim()),
+        keepAlive: _keepAlive,
+        timeout: _timeout,
+        allowEdit: _allowEdit,
+        allowCommands: _allowCommands,
+      );
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = error is FormatException
+            ? error.message
+            : error is OllamaException
+            ? error.message
+            : error.toString();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final viewport = MediaQuery.sizeOf(context);
+    return Dialog(
+      key: const Key('settings-dialog'),
+      insetPadding: const EdgeInsets.all(20),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 560,
+          maxHeight: viewport.height * .82,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(26, 24, 26, 14),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Configurações',
+                      style: TextStyle(
+                        color: _ink,
+                        fontSize: 19,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -.3,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    const _DialogLabel('SERVIDOR OLLAMA'),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            key: const Key('settings-host-field'),
+                            controller: _hostController,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontFamily: 'JetBrains Mono',
+                            ),
+                            decoration: const InputDecoration(
+                              hintText: 'http://127.0.0.1:11434',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          key: const Key('test-host-button'),
+                          onPressed: _testing ? null : _test,
+                          icon: _testing
+                              ? const SizedBox.square(
+                                  dimension: 13,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.wifi_tethering_rounded,
+                                  size: 16,
+                                ),
+                          label: const Text('Testar'),
+                        ),
+                      ],
+                    ),
+                    if (_testResult != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _testResult!.ok
+                            ? 'Servidor ok · ${_testResult!.latency!.inMilliseconds} ms · ${_testResult!.modelCount} modelo(s) instalado(s)'
+                            : 'Falha no teste: ${_testResult!.error}',
+                        key: const Key('host-test-result'),
+                        style: TextStyle(
+                          color: _testResult!.ok
+                              ? const Color(0xFF2E7D57)
+                              : _coral,
+                          fontSize: 11.5,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    const _DialogLabel('INFERÊNCIA'),
+                    const SizedBox(height: 10),
+                    _SliderSetting(
+                      label: 'Temperatura',
+                      value: _temperature,
+                      onChanged: (value) =>
+                          setState(() => _temperature = value),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      key: const Key('settings-context-field'),
+                      controller: _contextController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontFamily: 'JetBrains Mono',
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Tamanho do contexto',
+                        hintText: 'Padrão do modelo',
+                        suffixText: 'tokens',
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    DropdownButtonFormField<Duration?>(
+                      key: const Key('settings-keep-alive-field'),
+                      initialValue: _keepAlive,
+                      decoration: const InputDecoration(
+                        labelText: 'Keep-alive',
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: null,
+                          child: Text('Padrão do Ollama (5 min)'),
+                        ),
+                        DropdownMenuItem(
+                          value: Duration(minutes: 30),
+                          child: Text('30 minutos'),
+                        ),
+                        DropdownMenuItem(
+                          value: Duration(hours: 1),
+                          child: Text('1 hora'),
+                        ),
+                        DropdownMenuItem(
+                          value: Duration(hours: 4),
+                          child: Text('4 horas'),
+                        ),
+                        DropdownMenuItem(
+                          value: Duration(hours: 24),
+                          child: Text('24 horas'),
+                        ),
+                      ],
+                      onChanged: (value) => setState(() => _keepAlive = value),
+                    ),
+                    const SizedBox(height: 14),
+                    DropdownButtonFormField<Duration?>(
+                      key: const Key('settings-timeout-field'),
+                      initialValue: _timeout,
+                      decoration: const InputDecoration(
+                        labelText: 'Timeout das requisições',
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: null,
+                          child: Text('Sem limite'),
+                        ),
+                        DropdownMenuItem(
+                          value: Duration(seconds: 30),
+                          child: Text('30 segundos'),
+                        ),
+                        DropdownMenuItem(
+                          value: Duration(seconds: 60),
+                          child: Text('60 segundos'),
+                        ),
+                        DropdownMenuItem(
+                          value: Duration(seconds: 120),
+                          child: Text('120 segundos'),
+                        ),
+                      ],
+                      onChanged: (value) => setState(() => _timeout = value),
+                    ),
+                    const SizedBox(height: 20),
+                    const _DialogLabel('PERMISSÕES'),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      key: const Key('settings-allow-edit'),
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text(
+                        'Editar arquivos',
+                        style: TextStyle(fontSize: 13.5),
+                      ),
+                      subtitle: const Text(
+                        'Permite write_file e replace_in_file na pasta do projeto.',
+                        style: TextStyle(fontSize: 11),
+                      ),
+                      value: _allowEdit,
+                      onChanged: (value) => setState(() => _allowEdit = value),
+                    ),
+                    SwitchListTile(
+                      key: const Key('settings-allow-commands'),
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text(
+                        'Executar comandos',
+                        style: TextStyle(fontSize: 13.5),
+                      ),
+                      subtitle: const Text(
+                        'Permite run_command na pasta do projeto.',
+                        style: TextStyle(fontSize: 11),
+                      ),
+                      value: _allowCommands,
+                      onChanged: (value) =>
+                          setState(() => _allowCommands = value),
+                    ),
+                    const SwitchListTile(
+                      key: Key('settings-network-access'),
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        'Acesso à rede',
+                        style: TextStyle(fontSize: 13.5),
+                      ),
+                      subtitle: Text(
+                        'Desabilitado: run_command executa sem sandbox de rede, então o agente sempre pode alcançar a internet.',
+                        style: TextStyle(fontSize: 11),
+                      ),
+                      value: false,
+                      onChanged: null,
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 14),
+                      Container(
+                        key: const Key('settings-error'),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFE9E5),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _error!,
+                          style: const TextStyle(color: _ink, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(26, 0, 26, 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    key: const Key('settings-cancel-button'),
+                    onPressed: _saving ? null : () => Navigator.pop(context),
+                    child: const Text('Cancelar'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    key: const Key('settings-save-button'),
+                    onPressed: _saving ? null : _save,
+                    icon: _saving
+                        ? const SizedBox.square(
+                            dimension: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.sync_rounded, size: 16),
+                    label: const Text('Salvar e reconectar'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DialogLabel extends StatelessWidget {
+  const _DialogLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(
+        color: _muted,
+        fontSize: 10,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 1.2,
+      ),
+    );
+  }
+}
+
+class _SliderSetting extends StatelessWidget {
+  const _SliderSetting({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final double value;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 120,
+          child: Text(
+            label,
+            style: const TextStyle(color: _ink, fontSize: 13.5),
+          ),
+        ),
+        Expanded(
+          child: Slider(
+            value: value.clamp(0, 1),
+            min: 0,
+            max: 1,
+            divisions: 20,
+            label: value.toStringAsFixed(2),
+            onChanged: onChanged,
+          ),
+        ),
+        SizedBox(
+          width: 38,
+          child: Text(
+            value.toStringAsFixed(2),
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              color: _ink,
+              fontSize: 12,
+              fontFamily: 'JetBrains Mono',
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ActivityPanel extends StatelessWidget {
+  const _ActivityPanel({required this.controller, required this.onCollapse});
+
+  final DesktopController controller;
+  final VoidCallback onCollapse;
+
+  @override
+  Widget build(BuildContext context) {
+    final currentSession = controller.currentSessionSummary;
+    final sessions = controller.sessions;
+    return Container(
+      key: const Key('activity-panel'),
       decoration: const BoxDecoration(color: _deepNavy),
       child: Stack(
         children: [
@@ -272,101 +1394,53 @@ class _SessionPanel extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(22, 26, 22, 20),
+            padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const _Brand(),
-                const SizedBox(height: 32),
-                _SideLabel(
-                  text: 'SESSÃO LOCAL',
-                  trailing: _ConnectionDot(state: controller.connectionState),
-                ),
-                const SizedBox(height: 12),
-                _DarkField(
-                  label: 'Servidor Ollama',
-                  controller: hostController,
-                  hint: 'http://127.0.0.1:11434',
-                ),
-                const SizedBox(height: 12),
-                _DarkField(
-                  label: 'Pasta do projeto',
-                  controller: rootController,
-                  suffix: IconButton(
-                    tooltip: 'Escolher pasta',
-                    onPressed: onChooseRoot,
-                    icon: const Icon(Icons.folder_open_rounded, size: 19),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  key: ValueKey(controller.selectedModel),
-                  initialValue:
-                      controller.models.any(
-                        (model) => model.name == controller.selectedModel,
-                      )
-                      ? controller.selectedModel
-                      : null,
-                  dropdownColor: _navy,
-                  iconEnabledColor: Colors.white70,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  decoration: _darkDecoration('Modelo'),
-                  items: controller.models
-                      .map(
-                        (model) => DropdownMenuItem(
-                          value: model.name,
-                          child: Text(
-                            model.name,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                Row(
+                  children: [
+                    IconButton(
+                      key: const Key('collapse-panel-button'),
+                      tooltip: 'Recolher painel',
+                      onPressed: onCollapse,
+                      icon: const Icon(
+                        Icons.menu_open_rounded,
+                        color: Colors.white70,
+                        size: 19,
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    const Text(
+                      'ATIVIDADE',
+                      style: TextStyle(
+                        color: Colors.white54,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.3,
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: .09),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                      child: Text(
+                        '${controller.activities.length}',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          fontFeatures: [FontFeature.tabularFigures()],
                         ),
-                      )
-                      .toList(growable: false),
-                  onChanged: controller.selectModel,
-                ),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  onPressed:
-                      controller.connectionState ==
-                          OllamaConnectionState.loading
-                      ? null
-                      : onConnect,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _coral,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: _coral.withValues(alpha: .45),
-                    minimumSize: const Size.fromHeight(42),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(9),
+                      ),
                     ),
-                  ),
-                  icon:
-                      controller.connectionState ==
-                          OllamaConnectionState.loading
-                      ? const SizedBox.square(
-                          dimension: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.sync_rounded, size: 18),
-                  label: Text(
-                    controller.connectionState == OllamaConnectionState.ready
-                        ? 'Atualizar conexão'
-                        : 'Conectar ao Ollama',
-                  ),
-                ),
-                const SizedBox(height: 26),
-                _SideLabel(
-                  text: 'ATIVIDADE DO AGENTE',
-                  trailing: Text(
-                    '${controller.activities.length}',
-                    style: const TextStyle(
-                      color: Colors.white54,
-                      fontFeatures: [FontFeature.tabularFigures()],
-                    ),
-                  ),
+                  ],
                 ),
                 const SizedBox(height: 10),
                 Expanded(
@@ -374,10 +1448,50 @@ class _SessionPanel extends StatelessWidget {
                       ? const _NoActivity()
                       : ListView.separated(
                           itemCount: controller.activities.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: 8),
+                          separatorBuilder: (_, _) => const SizedBox(height: 7),
                           itemBuilder: (_, index) => _ActivityTile(
                             activity: controller.activities[index],
                           ),
+                        ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'SESSÕES',
+                  style: TextStyle(
+                    color: Colors.white54,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.3,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 150,
+                  child: (sessions.isEmpty && currentSession == null)
+                      ? const Align(
+                          alignment: Alignment.topLeft,
+                          child: Text(
+                            'As sessões encerradas aparecerão aqui.',
+                            style: TextStyle(
+                              color: Colors.white38,
+                              fontSize: 11,
+                            ),
+                          ),
+                        )
+                      : ListView(
+                          children: [
+                            if (currentSession != null)
+                              _SessionTile(
+                                session: currentSession,
+                                current: true,
+                              ),
+                            ...sessions.map(
+                              (session) => _SessionTile(
+                                session: session,
+                                current: false,
+                              ),
+                            ),
+                          ],
                         ),
                 ),
               ],
@@ -389,139 +1503,168 @@ class _SessionPanel extends StatelessWidget {
   }
 }
 
-class _ChatWorkspace extends StatelessWidget {
-  const _ChatWorkspace({
-    required this.controller,
-    required this.promptController,
-    required this.promptFocus,
-    required this.scrollController,
-    required this.suggestions,
-    required this.onSuggestion,
-    required this.onMention,
-    required this.onSend,
-    this.onShowSettings,
-  });
+class _SessionTile extends StatelessWidget {
+  const _SessionTile({required this.session, required this.current});
 
-  final DesktopController controller;
-  final TextEditingController promptController;
-  final FocusNode promptFocus;
-  final ScrollController scrollController;
-  final List<String> suggestions;
-  final ValueChanged<String> onSuggestion;
-  final VoidCallback onMention;
-  final VoidCallback onSend;
-  final VoidCallback? onShowSettings;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _TopBar(controller: controller, onShowSettings: onShowSettings),
-        if (controller.connectionError != null)
-          _ErrorBanner(message: controller.connectionError!),
-        Expanded(
-          child: controller.messages.isEmpty
-              ? _EmptyState(
-                  ready:
-                      controller.connectionState == OllamaConnectionState.ready,
-                  onPrompt: (text) {
-                    promptController.text = text;
-                    promptController.selection = TextSelection.collapsed(
-                      offset: text.length,
-                    );
-                    promptFocus.requestFocus();
-                  },
-                )
-              : ListView.builder(
-                  controller: scrollController,
-                  padding: const EdgeInsets.fromLTRB(28, 30, 28, 18),
-                  itemCount:
-                      controller.messages.length +
-                      (controller.isSending ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index == controller.messages.length) {
-                      return const _ThinkingCard();
-                    }
-                    return _MessageCard(entry: controller.messages[index]);
-                  },
-                ),
-        ),
-        _Composer(
-          controller: promptController,
-          focusNode: promptFocus,
-          suggestions: suggestions,
-          sending: controller.isSending,
-          ready: controller.connectionState == OllamaConnectionState.ready,
-          onSuggestion: onSuggestion,
-          onMention: onMention,
-          onSend: onSend,
-        ),
-      ],
-    );
-  }
-}
-
-class _TopBar extends StatelessWidget {
-  const _TopBar({required this.controller, this.onShowSettings});
-
-  final DesktopController controller;
-  final VoidCallback? onShowSettings;
+  final PersistedSessionSummary session;
+  final bool current;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 72,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      decoration: const BoxDecoration(
-        color: _paper,
-        border: Border(bottom: BorderSide(color: _line)),
+      margin: const EdgeInsets.only(bottom: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: .055),
+        borderRadius: BorderRadius.circular(8),
+        border: Border(
+          left: BorderSide(
+            color: current ? _coral : Colors.transparent,
+            width: 3,
+          ),
+        ),
       ),
+      padding: const EdgeInsets.fromLTRB(11, 9, 10, 9),
       child: Row(
         children: [
-          if (onShowSettings != null) ...[
-            IconButton(
-              tooltip: 'Configurar sessão',
-              onPressed: onShowSettings,
-              icon: const Icon(Icons.tune_rounded),
-            ),
-            const SizedBox(width: 8),
-          ],
           Expanded(
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  controller.selectedModel ?? 'Agente local',
+                  session.title,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: _ink,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: current ? FontWeight.w700 : FontWeight.w500,
                   ),
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  controller.root.path,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  '${_formatSessionDate(session.startedAt)} · ${session.actionCount} ações',
                   style: const TextStyle(
-                    color: _muted,
-                    fontSize: 11,
-                    fontFamily: 'monospace',
+                    color: Colors.white38,
+                    fontSize: 9.5,
+                    fontFamily: 'JetBrains Mono',
                   ),
                 ),
               ],
             ),
           ),
-          TextButton.icon(
-            onPressed: controller.messages.isEmpty
+          if (current)
+            Container(
+              width: 7,
+              height: 7,
+              decoration: const BoxDecoration(
+                color: _coral,
+                shape: BoxShape.circle,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActivityRail extends StatelessWidget {
+  const _ActivityRail({required this.controller, required this.onExpand});
+
+  final DesktopController controller;
+  final VoidCallback onExpand;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('activity-rail'),
+      decoration: const BoxDecoration(color: _deepNavy),
+      child: Column(
+        children: [
+          const SizedBox(height: 12),
+          IconButton(
+            key: const Key('expand-panel-button'),
+            tooltip: 'Expandir painel',
+            onPressed: onExpand,
+            icon: const Icon(
+              Icons.menu_rounded,
+              color: Colors.white70,
+              size: 19,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _RailIcon(
+            key: const Key('rail-activity-button'),
+            icon: Icons.monitor_heart_outlined,
+            badge: controller.activities.isEmpty
                 ? null
-                : controller.clearSession,
-            icon: const Icon(Icons.add_comment_outlined, size: 17),
-            label: const Text('Nova sessão'),
+                : '${controller.activities.length}',
+            onTap: onExpand,
+          ),
+          const SizedBox(height: 8),
+          _RailIcon(
+            key: const Key('rail-sessions-button'),
+            icon: Icons.history_rounded,
+            badge:
+                (controller.sessions.isNotEmpty ||
+                    controller.currentSessionSummary != null)
+                ? '${controller.sessions.length + (controller.currentSessionSummary != null ? 1 : 0)}'
+                : null,
+            onTap: onExpand,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _RailIcon extends StatelessWidget {
+  const _RailIcon({
+    super.key,
+    required this.icon,
+    required this.onTap,
+    this.badge,
+  });
+
+  final IconData icon;
+  final VoidCallback onTap;
+  final String? badge;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(9),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Icon(icon, color: Colors.white60, size: 19),
+            if (badge != null)
+              Positioned(
+                right: -12,
+                top: -8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _coral,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Text(
+                    badge!,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -599,7 +1742,7 @@ class _Composer extends StatelessWidget {
                                       style: const TextStyle(
                                         color: _ink,
                                         fontSize: 12,
-                                        fontFamily: 'monospace',
+                                        fontFamily: 'JetBrains Mono',
                                       ),
                                     ),
                                   ),
@@ -640,6 +1783,7 @@ class _Composer extends StatelessWidget {
                         return KeyEventResult.ignored;
                       },
                       child: TextField(
+                        key: const Key('composer-field'),
                         controller: controller,
                         focusNode: focusNode,
                         minLines: 2,
@@ -653,7 +1797,7 @@ class _Composer extends StatelessWidget {
                         decoration: InputDecoration.collapsed(
                           hintText: ready
                               ? 'Peça uma alteração ou mencione um arquivo com @…'
-                              : 'Conecte ao Ollama para começar…',
+                              : 'Conecte ao Ollama e inicie o modelo para começar…',
                           hintStyle: const TextStyle(color: _muted),
                         ),
                       ),
@@ -679,6 +1823,7 @@ class _Composer extends StatelessWidget {
                         ),
                         const SizedBox(width: 12),
                         FilledButton(
+                          key: const Key('send-button'),
                           onPressed: sending || !ready ? null : onSend,
                           style: FilledButton.styleFrom(
                             backgroundColor: _ocean,
@@ -712,9 +1857,14 @@ class _Composer extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.ready, required this.onPrompt});
+  const _EmptyState({
+    required this.ready,
+    required this.rootPath,
+    required this.onPrompt,
+  });
 
   final bool ready;
+  final String rootPath;
   final ValueChanged<String> onPrompt;
 
   @override
@@ -756,8 +1906,8 @@ class _EmptyState extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 ready
-                    ? 'O agente pode ler, editar e executar comandos somente na pasta selecionada.'
-                    : 'Confirme o servidor, a pasta e o modelo no painel de sessão.',
+                    ? 'O agente pode ler, editar e executar comandos somente em $rootPath.'
+                    : 'Confirme o servidor, a pasta e o modelo para começar.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: _muted,
@@ -899,7 +2049,7 @@ class _MetricsBar extends StatelessWidget {
               style: const TextStyle(
                 color: _muted,
                 fontSize: 10,
-                fontFamily: 'monospace',
+                fontFamily: 'JetBrains Mono',
               ),
             ),
           )
@@ -960,144 +2110,6 @@ class _ErrorBanner extends StatelessWidget {
   }
 }
 
-class _Brand extends StatelessWidget {
-  const _Brand();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Row(
-      children: [
-        DecoratedBox(
-          decoration: BoxDecoration(color: _coral, shape: BoxShape.circle),
-          child: SizedBox(
-            width: 34,
-            height: 34,
-            child: Icon(
-              Icons.chevron_right_rounded,
-              color: Colors.white,
-              size: 25,
-            ),
-          ),
-        ),
-        SizedBox(width: 11),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'SALVADOR',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.8,
-              ),
-            ),
-            Text(
-              'AGENTE LOCAL',
-              style: TextStyle(
-                color: Colors.white54,
-                fontSize: 9,
-                letterSpacing: 1.5,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _SideLabel extends StatelessWidget {
-  const _SideLabel({required this.text, required this.trailing});
-
-  final String text;
-  final Widget trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(
-              color: Colors.white54,
-              fontSize: 9,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.35,
-            ),
-          ),
-        ),
-        trailing,
-      ],
-    );
-  }
-}
-
-class _ConnectionDot extends StatelessWidget {
-  const _ConnectionDot({required this.state});
-
-  final OllamaConnectionState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (state) {
-      OllamaConnectionState.ready => const Color(0xFF7BD8B0),
-      OllamaConnectionState.loading => const Color(0xFFFFCF70),
-      OllamaConnectionState.failed => _coral,
-      OllamaConnectionState.idle => Colors.white38,
-    };
-    return Container(
-      width: 8,
-      height: 8,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-    );
-  }
-}
-
-class _DarkField extends StatelessWidget {
-  const _DarkField({
-    required this.label,
-    required this.controller,
-    this.hint,
-    this.suffix,
-  });
-
-  final String label;
-  final TextEditingController controller;
-  final String? hint;
-  final Widget? suffix;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      style: const TextStyle(color: Colors.white, fontSize: 12),
-      decoration: _darkDecoration(label).copyWith(
-        hintText: hint,
-        hintStyle: const TextStyle(color: Colors.white38),
-        suffixIcon: suffix,
-        suffixIconColor: Colors.white60,
-      ),
-    );
-  }
-}
-
-InputDecoration _darkDecoration(String label) => InputDecoration(
-  labelText: label,
-  labelStyle: const TextStyle(color: Colors.white54, fontSize: 11),
-  filled: true,
-  fillColor: Colors.white.withValues(alpha: .07),
-  enabledBorder: OutlineInputBorder(
-    borderRadius: BorderRadius.circular(9),
-    borderSide: BorderSide(color: Colors.white.withValues(alpha: .13)),
-  ),
-  focusedBorder: OutlineInputBorder(
-    borderRadius: BorderRadius.circular(9),
-    borderSide: const BorderSide(color: _ocean, width: 1.5),
-  ),
-);
-
 class _NoActivity extends StatelessWidget {
   const _NoActivity();
 
@@ -1121,15 +2133,44 @@ class _ActivityTile extends StatelessWidget {
 
   final ToolActivity activity;
 
+  ({String badge, String title, Color color}) get _style =>
+      switch (activity.call.name) {
+        'read_file' => (
+          badge: 'R',
+          title: 'Leitura',
+          color: const Color(0xFF74C9D3),
+        ),
+        'write_file' => (
+          badge: 'W',
+          title: 'Gravação',
+          color: const Color(0xFF7BD8B0),
+        ),
+        'replace_in_file' => (
+          badge: 'E',
+          title: 'Edição',
+          color: const Color(0xFFFFCF70),
+        ),
+        'run_command' => (
+          badge: '\$',
+          title: 'Comando',
+          color: const Color(0xFFF29E8E),
+        ),
+        _ => (badge: '?', title: activity.call.name, color: Colors.white54),
+      };
+
+  String get _detail {
+    final result = activity.result;
+    final measurable =
+        result.startsWith('OK:') ||
+        result.startsWith('ERRO:') ||
+        result.contains('EXIT_CODE:');
+    if (measurable) return result.split('\n').first;
+    return activity.summary;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final icon = switch (activity.call.name) {
-      'read_file' => Icons.visibility_outlined,
-      'write_file' => Icons.note_add_outlined,
-      'replace_in_file' => Icons.edit_note_rounded,
-      'run_command' => Icons.terminal_rounded,
-      _ => Icons.build_outlined,
-    };
+    final style = _style;
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -1138,30 +2179,62 @@ class _ActivityTile extends StatelessWidget {
         border: Border.all(color: Colors.white.withValues(alpha: .08)),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: const Color(0xFF74C9D3), size: 17),
+          Container(
+            width: 22,
+            height: 22,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: style.color.withValues(alpha: .16),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              style.badge,
+              style: TextStyle(
+                color: style.color,
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                fontFamily: 'JetBrains Mono',
+              ),
+            ),
+          ),
           const SizedBox(width: 9),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  activity.call.name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        style.title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      _relativeTime(activity.happenedAt),
+                      style: const TextStyle(
+                        color: Color(0x75FFFFFF),
+                        fontSize: 9,
+                        fontFamily: 'JetBrains Mono',
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  activity.summary,
+                  _detail,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Color(0x75FFFFFF),
                     fontSize: 9,
-                    fontFamily: 'monospace',
+                    fontFamily: 'JetBrains Mono',
                   ),
                 ),
               ],
@@ -1221,7 +2294,7 @@ class _FileChip extends StatelessWidget {
         style: const TextStyle(
           color: _ocean,
           fontSize: 10,
-          fontFamily: 'monospace',
+          fontFamily: 'JetBrains Mono',
         ),
       ),
     );
@@ -1257,138 +2330,27 @@ class _AzulejoPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-class _DirectoryPicker extends StatefulWidget {
-  const _DirectoryPicker({required this.initialPath});
-
-  final String initialPath;
-
-  @override
-  State<_DirectoryPicker> createState() => _DirectoryPickerState();
+String _formatBytes(int bytes) {
+  if (bytes <= 0) return 'n/d';
+  final gb = bytes / 1024 / 1024 / 1024;
+  if (gb >= 1) return '${gb.toStringAsFixed(1)} GB';
+  return '${(bytes / 1024 / 1024).toStringAsFixed(0)} MB';
 }
 
-class _DirectoryPickerState extends State<_DirectoryPicker> {
-  late Directory _current;
-  List<Directory> _directories = const [];
-  String? _error;
-  bool _loading = true;
+String _relativeTime(DateTime time) {
+  final diff = DateTime.now().difference(time);
+  if (diff.inMinutes < 1) return 'agora';
+  if (diff.inHours < 1) return '${diff.inMinutes} min';
+  if (diff.inDays < 1) return '${diff.inHours} h';
+  return '${diff.inDays} d';
+}
 
-  @override
-  void initState() {
-    super.initState();
-    final candidate = Directory(widget.initialPath).absolute;
-    _current = candidate.existsSync() ? candidate : Directory.current.absolute;
-    _load();
+String _formatSessionDate(DateTime date) {
+  final now = DateTime.now();
+  final sameDay =
+      date.year == now.year && date.month == now.month && date.day == now.day;
+  if (sameDay) {
+    return 'hoje ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final directories = await _current
-          .list(followLinks: false)
-          .where((entity) => entity is Directory)
-          .cast<Directory>()
-          .toList();
-      directories.sort(
-        (a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()),
-      );
-      if (!mounted) return;
-      setState(() => _directories = directories);
-    } on FileSystemException catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error.message);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _open(Directory directory) async {
-    _current = directory.absolute;
-    await _load();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: _paper,
-      title: const Text('Escolher pasta do projeto'),
-      content: SizedBox(
-        width: 620,
-        height: 430,
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              decoration: BoxDecoration(
-                color: _shell,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  IconButton(
-                    tooltip: 'Pasta acima',
-                    onPressed: _current.parent.path == _current.path
-                        ? null
-                        : () => _open(_current.parent),
-                    icon: const Icon(Icons.arrow_upward_rounded, size: 18),
-                  ),
-                  Expanded(
-                    child: SelectableText(
-                      _current.path,
-                      maxLines: 1,
-                      style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 11,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _error != null
-                  ? Center(child: Text(_error!))
-                  : _directories.isEmpty
-                  ? const Center(
-                      child: Text('Esta pasta não contém subpastas.'),
-                    )
-                  : ListView.builder(
-                      itemCount: _directories.length,
-                      itemBuilder: (_, index) {
-                        final directory = _directories[index];
-                        final name = directory.uri.pathSegments
-                            .where((part) => part.isNotEmpty)
-                            .last;
-                        return ListTile(
-                          leading: const Icon(
-                            Icons.folder_rounded,
-                            color: _ocean,
-                          ),
-                          title: Text(name),
-                          trailing: const Icon(Icons.chevron_right_rounded),
-                          onTap: () => _open(directory),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, _current.path),
-          child: const Text('Usar esta pasta'),
-        ),
-      ],
-    );
-  }
+  return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
 }

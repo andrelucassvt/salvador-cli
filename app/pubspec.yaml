@@ -7,10 +7,12 @@ environment:
   sdk: ^3.12.2
 
 dependencies:
+  file_selector: ^1.1.0
   flutter:
     sdk: flutter
   salvador_cli:
     path: ..
+  window_manager: ^0.5.2
 
 dev_dependencies:
   flutter_test:
@@ -19,3 +21,10 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  fonts:
+    - family: Archivo
+      fonts:
+        - asset: assets/fonts/Archivo-VariableFont_wdth,wght.ttf
+    - family: JetBrains Mono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-VariableFont_wght.ttf

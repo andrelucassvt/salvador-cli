@@ -421,6 +421,21 @@ class DesktopController extends ChangeNotifier {
 
   Future<int?> availableMemory() => _memoryReader.availableBytes();
 
+  Future<int?> fetchModelContext(String name) async => _client?.showModel(name);
+
+  PersistedSessionSummary? get currentSessionSummary {
+    final firstPrompt = _sessionFirstPrompt;
+    if (firstPrompt == null) return null;
+    final title = firstPrompt.length > _maxSessionTitleLength
+        ? firstPrompt.substring(0, _maxSessionTitleLength)
+        : firstPrompt;
+    return PersistedSessionSummary(
+      title: title,
+      startedAt: _sessionStartedAt ?? _clock(),
+      actionCount: activities.length,
+    );
+  }
+
   List<String> fileSuggestions(String input, int cursor, {int limit = 6}) {
     final active = _mentions.activeMention(input, cursor);
     if (active == null) return const [];
