@@ -71,6 +71,46 @@ void main() {
     expect(call.name, 'read_file');
     expect(call.arguments, {'path': 'README.md'});
   });
+
+  test('agrega metricas de todas as rodadas da resposta', () async {
+    final client = FakeChatClient([
+      AgentMessage(
+        role: 'assistant',
+        toolCalls: [
+          ToolCall(name: 'read_file', arguments: {'path': 'a.txt'}),
+        ],
+        metrics: const InferenceMetrics(
+          promptTokens: 10,
+          generatedTokens: 4,
+          generationDurationNanoseconds: 200000000,
+          totalDurationNanoseconds: 300000000,
+        ),
+      ),
+      AgentMessage(
+        role: 'assistant',
+        content: 'fim',
+        metrics: const InferenceMetrics(
+          promptTokens: 20,
+          generatedTokens: 6,
+          generationDurationNanoseconds: 300000000,
+          totalDurationNanoseconds: 400000000,
+        ),
+      ),
+    ]);
+    await File('${root.path}/a.txt').writeAsString('a');
+    final session = AgentSession(client: client, root: root);
+
+    final result = await session.sendDetailed('leia @a.txt');
+
+    expect(result.answer, 'fim');
+    expect(result.mentionedFiles, ['a.txt']);
+    expect(result.metrics?.promptTokens, 30);
+    expect(result.metrics?.generatedTokens, 10);
+    expect(result.metrics?.tokensPerSecond, 20);
+    expect(result.metrics?.generations, 2);
+    expect(client.requests.first.last.content, contains('arquivo mencionado'));
+    expect(client.requests.first.last.content, contains('\na\n'));
+  });
 }
 
 class FakeChatClient implements ChatClient {

@@ -66,4 +66,5 @@ Uso: dart run bin/salvador_cli.dart [opcoes]
   --root CAMINHO Raiz permitida para as ferramentas (padrao: diretorio atual)
   -h, --help     Exibe esta ajuda
 
-No chat, use /clear para limpar a sessao e /exit para sair.''';
+No chat, use @ para mencionar arquivos, /clear para limpar a sessao e /exit
+para sair. Cada resposta inclui tokens/s e outras metricas do Ollama.''';

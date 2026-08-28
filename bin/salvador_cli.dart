@@ -1,5 +1,3 @@
-import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:salvador_cli/salvador_cli.dart';
@@ -52,68 +50,37 @@ Future<void> main(List<String> arguments) async {
     stdout.writeln('  ${index + 1}) ${models[index]}');
   }
 
-  final lines = StreamIterator(
-    stdin.transform(utf8.decoder).transform(const LineSplitter()),
-  );
-  final model = config.model ?? await _selectModel(models, lines);
-  if (model == null) {
+  final terminal = TerminalInput();
+  try {
+    final model = config.model ?? await _selectModel(models, terminal);
+    if (model == null) {
+      stdout.writeln('\nAte logo.');
+      return;
+    }
+    if (!models.contains(model)) {
+      stderr.writeln('O modelo "$model" nao aparece em `ollama list`.');
+      exitCode = 64;
+      return;
+    }
+
+    await _chat(config, model, terminal);
+  } on TerminalInputInterrupted {
     stdout.writeln('\nAte logo.');
-    return;
+  } finally {
+    await terminal.close();
   }
-  if (!models.contains(model)) {
-    stderr.writeln('O modelo "$model" nao aparece em `ollama list`.');
-    exitCode = 64;
-    return;
-  }
-
-  final session = AgentSession(
-    client: OllamaClient(model: model, baseUrl: config.host),
-    root: config.root,
-    onToolCall: (call) => stdout.writeln('  > ${call.name}'),
-  );
-
-  stdout.writeln('\nLeve CLI | $model | ${config.root.path}');
-  stdout.writeln('Digite /exit para sair.');
-  stdout.write('\nvoce> ');
-
-  while (await lines.moveNext()) {
-    final input = lines.current.trim();
-    if (input == '/exit' || input == '/quit') break;
-    if (input == '/clear') {
-      session.clear();
-      stdout.writeln('Sessao limpa.');
-      stdout.write('\nvoce> ');
-      continue;
-    }
-    if (input.isEmpty) {
-      stdout.write('voce> ');
-      continue;
-    }
-
-    try {
-      final answer = await session.send(input);
-      stdout.writeln('\nleve> $answer');
-    } on SocketException catch (error) {
-      stderr.writeln('\nNao foi possivel conectar ao Ollama: ${error.message}');
-    } on OllamaException catch (error) {
-      stderr.writeln('\nErro do Ollama: $error');
-    } on AgentException catch (error) {
-      stderr.writeln('\nErro do agente: $error');
-    }
-    stdout.write('\nvoce> ');
-  }
-
-  stdout.writeln('\nAte logo.');
 }
 
 Future<String?> _selectModel(
   List<String> models,
-  StreamIterator<String> lines,
+  TerminalInput terminal,
 ) async {
   while (true) {
-    stdout.write('Selecione o modelo [1-${models.length}] ou /exit: ');
-    if (!await lines.moveNext()) return null;
-    final input = lines.current.trim();
+    final line = await terminal.readLine(
+      prompt: 'Selecione o modelo [1-${models.length}] ou /exit: ',
+    );
+    if (line == null) return null;
+    final input = line.trim();
     if (input == '/exit' || input == '/quit') return null;
 
     final selection = int.tryParse(input);
@@ -122,4 +89,53 @@ Future<String?> _selectModel(
     }
     stdout.writeln('Selecao invalida. Digite o numero de um modelo.');
   }
+}
+
+Future<void> _chat(
+  CliConfig config,
+  String model,
+  TerminalInput terminal,
+) async {
+  final session = AgentSession(
+    client: OllamaClient(model: model, baseUrl: config.host),
+    root: config.root,
+    onToolCall: (call) => stdout.writeln('  > ${call.name}'),
+  );
+  final mentions = FileMentionService(config.root);
+
+  stdout.writeln('\nLeve CLI | $model | ${config.root.path}');
+  stdout.writeln('Digite @ para mencionar arquivos (setas + Tab).');
+  stdout.writeln('Use /clear para limpar e /exit para sair.');
+
+  while (true) {
+    stdout.writeln();
+    final line = await terminal.readLine(prompt: 'voce> ', mentions: mentions);
+    if (line == null) break;
+    final input = line.trim();
+    if (input == '/exit' || input == '/quit') break;
+    if (input == '/clear') {
+      session.clear();
+      stdout.writeln('Sessao limpa.');
+      continue;
+    }
+    if (input.isEmpty) continue;
+
+    try {
+      final result = await session.sendDetailed(input);
+      for (final warning in result.warnings) {
+        stderr.writeln('  aviso> $warning');
+      }
+      stdout.writeln('\nleve> ${result.answer}');
+      final metrics = result.metrics;
+      if (metrics != null) stdout.writeln(formatInferenceMetrics(metrics));
+    } on SocketException catch (error) {
+      stderr.writeln('\nNao foi possivel conectar ao Ollama: ${error.message}');
+    } on OllamaException catch (error) {
+      stderr.writeln('\nErro do Ollama: $error');
+    } on AgentException catch (error) {
+      stderr.writeln('\nErro do agente: $error');
+    }
+  }
+
+  stdout.writeln('\nAte logo.');
 }

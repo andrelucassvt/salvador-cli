@@ -29,6 +29,12 @@ void main() {
               },
             ],
           },
+          'prompt_eval_count': 100,
+          'prompt_eval_duration': 200000000,
+          'eval_count': 25,
+          'eval_duration': 500000000,
+          'total_duration': 800000000,
+          'load_duration': 100000000,
         }),
       );
       await request.response.close();
@@ -54,5 +60,13 @@ void main() {
     expect(requestBody['tools'], isA<List<Object?>>());
     expect(message.toolCalls.single.name, 'write_file');
     expect(message.toolCalls.single.arguments['path'], 'a.txt');
+    expect(message.metrics?.promptTokens, 100);
+    expect(message.metrics?.generatedTokens, 25);
+    expect(message.metrics?.tokensPerSecond, 50);
+    expect(
+      formatInferenceMetrics(message.metrics!),
+      'metricas> 50.0 tok/s | 25 tokens de saida | 100 tokens de entrada | '
+      '0.50s gerando | 0.80s total',
+    );
   });
 }

@@ -51,7 +51,9 @@ class OllamaClient implements ChatClient {
       if (message is! Map) {
         throw const FormatException('Resposta sem campo message.');
       }
-      return AgentMessage.fromJson(message.cast<String, Object?>());
+      return AgentMessage.fromJson(
+        message.cast<String, Object?>(),
+      ).withMetrics(InferenceMetrics.fromJson(decoded));
     } on FormatException catch (error) {
       throw OllamaException('Resposta invalida do Ollama: ${error.message}');
     }

@@ -55,6 +55,7 @@ class AgentMessage {
     this.content = '',
     this.toolCalls = const [],
     this.toolName,
+    this.metrics,
   });
 
   factory AgentMessage.fromJson(Map<String, Object?> json) {
@@ -85,6 +86,15 @@ class AgentMessage {
   final String content;
   final List<ToolCall> toolCalls;
   final String? toolName;
+  final InferenceMetrics? metrics;
+
+  AgentMessage withMetrics(InferenceMetrics value) => AgentMessage(
+    role: role,
+    content: content,
+    toolCalls: toolCalls,
+    toolName: toolName,
+    metrics: value,
+  );
 
   Map<String, Object?> toJson() => {
     'role': role,
@@ -93,6 +103,73 @@ class AgentMessage {
       'tool_calls': toolCalls.map((call) => call.toJson()).toList(),
     if (toolName != null) 'tool_name': toolName,
   };
+}
+
+/// Technical counters returned by Ollama after one completed generation.
+/// Durations are kept in nanoseconds, exactly as the API reports them.
+class InferenceMetrics {
+  const InferenceMetrics({
+    this.promptTokens = 0,
+    this.generatedTokens = 0,
+    this.promptDurationNanoseconds = 0,
+    this.generationDurationNanoseconds = 0,
+    this.totalDurationNanoseconds = 0,
+    this.loadDurationNanoseconds = 0,
+    this.generations = 1,
+  });
+
+  factory InferenceMetrics.fromJson(Map<String, Object?> json) =>
+      InferenceMetrics(
+        promptTokens: _integer(json['prompt_eval_count']),
+        generatedTokens: _integer(json['eval_count']),
+        promptDurationNanoseconds: _integer(json['prompt_eval_duration']),
+        generationDurationNanoseconds: _integer(json['eval_duration']),
+        totalDurationNanoseconds: _integer(json['total_duration']),
+        loadDurationNanoseconds: _integer(json['load_duration']),
+      );
+
+  final int promptTokens;
+  final int generatedTokens;
+  final int promptDurationNanoseconds;
+  final int generationDurationNanoseconds;
+  final int totalDurationNanoseconds;
+  final int loadDurationNanoseconds;
+  final int generations;
+
+  double? get tokensPerSecond => generationDurationNanoseconds > 0
+      ? generatedTokens * 1000000000 / generationDurationNanoseconds
+      : null;
+
+  double get generationSeconds => generationDurationNanoseconds / 1000000000;
+  double get totalSeconds => totalDurationNanoseconds / 1000000000;
+
+  InferenceMetrics operator +(InferenceMetrics other) => InferenceMetrics(
+    promptTokens: promptTokens + other.promptTokens,
+    generatedTokens: generatedTokens + other.generatedTokens,
+    promptDurationNanoseconds:
+        promptDurationNanoseconds + other.promptDurationNanoseconds,
+    generationDurationNanoseconds:
+        generationDurationNanoseconds + other.generationDurationNanoseconds,
+    totalDurationNanoseconds:
+        totalDurationNanoseconds + other.totalDurationNanoseconds,
+    loadDurationNanoseconds:
+        loadDurationNanoseconds + other.loadDurationNanoseconds,
+    generations: generations + other.generations,
+  );
+
+  static int _integer(Object? value) => value is num ? value.toInt() : 0;
+}
+
+String formatInferenceMetrics(InferenceMetrics metrics) {
+  final rate = metrics.tokensPerSecond;
+  final rateText = rate == null ? 'n/d' : '${rate.toStringAsFixed(1)} tok/s';
+  final rounds = metrics.generations > 1
+      ? ' | ${metrics.generations} geracoes'
+      : '';
+  return 'metricas> $rateText | ${metrics.generatedTokens} tokens de saida | '
+      '${metrics.promptTokens} tokens de entrada | '
+      '${metrics.generationSeconds.toStringAsFixed(2)}s gerando | '
+      '${metrics.totalSeconds.toStringAsFixed(2)}s total$rounds';
 }
 
 class ToolDefinition {

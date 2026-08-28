@@ -36,7 +36,30 @@ Opcoes:
 --root CAMINHO   Raiz acessivel ao agente
 ```
 
-No chat, `/clear` limpa o historico e `/exit` encerra o programa.
+No chat:
+
+- digite `@` para buscar arquivos do projeto sem sair da linha atual;
+- continue digitando para filtrar, use as setas para escolher e `Tab` para
+  inserir o caminho;
+- caminhos com espacos sao inseridos como `@"meu arquivo.txt"`;
+- o conteudo dos arquivos mencionados e enviado ao modelo junto da mensagem;
+- `/clear` limpa o historico e `/exit` encerra o programa.
+
+Diretorios de dependencias e artefatos (`.git`, `.dart_tool`, `build` e
+`node_modules`, entre outros) nao aparecem nas sugestoes. Um caminho ainda
+pode ser mencionado diretamente, desde que seja um arquivo UTF-8 dentro da
+raiz. Cada arquivo mencionado tem limite de 512 KiB.
+
+Ao fim de cada resposta, o CLI mostra uma linha tecnica como esta:
+
+```text
+metricas> 34.8 tok/s | 87 tokens de saida | 512 tokens de entrada | 2.50s gerando | 2.81s total
+```
+
+Os valores usam diretamente `eval_count`, `eval_duration`,
+`prompt_eval_count` e `total_duration` devolvidos pelo Ollama. Quando o agente
+faz chamadas de ferramentas, as contagens e duracoes de todas as geracoes da
+resposta sao somadas.
 
 ## Validar
 
