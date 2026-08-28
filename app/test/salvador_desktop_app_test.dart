@@ -23,7 +23,7 @@ import 'package:salvador_desktop/presentation/desktop/view_model/settings_cubit.
 import 'package:salvador_desktop/presentation/desktop/view_model/settings_state.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/workspace_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/workspace_state.dart';
-import 'package:salvador_desktop/src/desktop/salvador_desktop_app.dart';
+import 'package:salvador_desktop/presentation/desktop/view/desktop_view.dart';
 
 /// Suíte de integração: registra Cubits reais no AppInjector, faking só a
 /// borda de rede (OllamaClient) e a borda de disco (DesktopStorageService),
@@ -112,7 +112,7 @@ void main() {
   }
 
   Future<void> pumpShell(WidgetTester tester) async {
-    await tester.pumpWidget(const SalvadorDesktopApp());
+    await tester.pumpWidget(const DesktopView());
     await tester.pumpAndSettle();
   }
 
@@ -267,10 +267,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('settings-dialog')), findsNothing);
-    expect(
-      (harness.workspaceCubit.state as WorkspaceReady).host,
-      previousHost,
-    );
+    expect((harness.workspaceCubit.state as WorkspaceReady).host, previousHost);
   });
 
   testWidgets('painel de atividade alterna com o rail e lista sessoes', (
@@ -373,9 +370,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('title bar customizada aparece somente no macOS', (
-    tester,
-  ) async {
+  testWidgets('title bar customizada aparece somente no macOS', (tester) async {
     await buildHarness(tester);
 
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
@@ -383,7 +378,7 @@ void main() {
     expect(find.byKey(const Key('mac-title-bar')), findsNothing);
 
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
-    await tester.pumpWidget(const SalvadorDesktopApp());
+    await tester.pumpWidget(const DesktopView());
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('mac-title-bar')), findsOneWidget);
     debugDefaultTargetPlatformOverride = null;
@@ -399,9 +394,7 @@ void main() {
         '${harness.root.path}/src/main.dart',
       ).writeAsString('void main() {\n  return;\n}');
       await File('${harness.root.path}/README.md').writeAsString('# leia-me');
-      await File(
-        '${harness.root.path}/imagem.bin',
-      ).writeAsBytes([0, 1, 2]);
+      await File('${harness.root.path}/imagem.bin').writeAsBytes([0, 1, 2]);
     });
     await pumpShell(tester);
 

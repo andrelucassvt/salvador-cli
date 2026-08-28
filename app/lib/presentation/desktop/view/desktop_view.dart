@@ -18,8 +18,8 @@ import 'package:salvador_desktop/presentation/desktop/widgets/chat_widgets.dart'
 import 'package:salvador_desktop/presentation/desktop/widgets/files_panel.dart';
 import 'package:salvador_desktop/presentation/desktop/widgets/preview_pane.dart';
 
-class SalvadorDesktopApp extends StatelessWidget {
-  const SalvadorDesktopApp({super.key});
+class DesktopView extends StatelessWidget {
+  const DesktopView({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -204,10 +204,7 @@ class _ShellScreenState extends State<_ShellScreen> {
     final cursor = value.selection.isValid
         ? value.selection.extentOffset
         : value.text.length;
-    final newText = _fileExplorerCubit.mentionPreviewedFile(
-      value.text,
-      cursor,
-    );
+    final newText = _fileExplorerCubit.mentionPreviewedFile(value.text, cursor);
     if (newText == value.text) return;
     _promptController.value = TextEditingValue(
       text: newText,
@@ -310,7 +307,8 @@ class _ShellScreenState extends State<_ShellScreen> {
                       SizedBox(
                         width: panelWidth,
                         child: ActivityPanel(
-                          onCollapse: () => setState(() => _panelExpanded = false),
+                          onCollapse: () =>
+                              setState(() => _panelExpanded = false),
                         ),
                       )
                     else
