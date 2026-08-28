@@ -1,5 +1,6 @@
 ## Unreleased
 
+- Autocomplete inline de comandos `/`, com filtro, setas e `Tab`.
 - Autocomplete inline de arquivos com `@`, setas e `Tab`, preservando a linha
   em edicao.
 - Inclusao segura do conteudo dos arquivos mencionados no contexto do modelo.

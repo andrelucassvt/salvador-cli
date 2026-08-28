@@ -53,6 +53,55 @@ void main() {
     expect(line, 'abc');
   });
 
+  test('mostra e completa comandos slash enquanto digita', () async {
+    final output = StringBuffer();
+    final terminal = TerminalInput(
+      input: Stream.value(utf8.encode('/c\t\r')),
+      output: output,
+      interactive: true,
+    );
+
+    final line = await terminal.readLine(
+      prompt: 'voce> ',
+      commands: const [
+        TerminalCommand('/clear', 'Limpa o historico da sessao'),
+        TerminalCommand('/exit', 'Encerra o programa'),
+      ],
+    );
+    await terminal.close();
+
+    expect(line, '/clear ');
+    expect(output.toString(), contains('/clear  Limpa o historico da sessao'));
+  });
+
+  test('usa as setas para selecionar um comando slash', () async {
+    final output = StringBuffer();
+    final bytes = <int>[
+      ...utf8.encode('/'),
+      27,
+      91,
+      66, // seta para baixo
+      9,
+      13,
+    ];
+    final terminal = TerminalInput(
+      input: Stream.value(bytes),
+      output: output,
+      interactive: true,
+    );
+
+    final line = await terminal.readLine(
+      prompt: '> ',
+      commands: const [
+        TerminalCommand('/clear', 'Limpa a sessao'),
+        TerminalCommand('/exit', 'Encerra o programa'),
+      ],
+    );
+    await terminal.close();
+
+    expect(line, '/exit ');
+  });
+
   test('rejeita prompt multilinha para impedir espacos durante redesenho', () {
     final terminal = TerminalInput(
       input: const Stream.empty(),

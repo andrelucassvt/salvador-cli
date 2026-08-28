@@ -2,6 +2,16 @@ import 'dart:io';
 
 import 'package:salvador_cli/salvador_cli.dart';
 
+const _exitCommands = [
+  TerminalCommand('/exit', 'Encerra o programa'),
+  TerminalCommand('/quit', 'Encerra o programa'),
+];
+
+const _chatCommands = [
+  TerminalCommand('/clear', 'Limpa o historico da sessao'),
+  ..._exitCommands,
+];
+
 Future<void> main(List<String> arguments) async {
   late final CliConfig config;
   try {
@@ -78,6 +88,7 @@ Future<String?> _selectModel(
   while (true) {
     final line = await terminal.readLine(
       prompt: 'Selecione o modelo [1-${models.length}] ou /exit: ',
+      commands: _exitCommands,
     );
     if (line == null) return null;
     final input = line.trim();
@@ -105,11 +116,15 @@ Future<void> _chat(
 
   stdout.writeln('\nLeve CLI | $model | ${config.root.path}');
   stdout.writeln('Digite @ para mencionar arquivos (setas + Tab).');
-  stdout.writeln('Use /clear para limpar e /exit para sair.');
+  stdout.writeln('Digite / para ver os comandos (setas + Tab).');
 
   while (true) {
     stdout.writeln();
-    final line = await terminal.readLine(prompt: 'voce> ', mentions: mentions);
+    final line = await terminal.readLine(
+      prompt: 'voce> ',
+      mentions: mentions,
+      commands: _chatCommands,
+    );
     if (line == null) break;
     final input = line.trim();
     if (input == '/exit' || input == '/quit') break;

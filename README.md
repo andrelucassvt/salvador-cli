@@ -43,6 +43,8 @@ No chat:
   inserir o caminho;
 - caminhos com espacos sao inseridos como `@"meu arquivo.txt"`;
 - o conteudo dos arquivos mencionados e enviado ao modelo junto da mensagem;
+- digite `/` para listar e filtrar os comandos, use as setas para escolher e
+  `Tab` para completar;
 - `/clear` limpa o historico e `/exit` encerra o programa.
 
 Diretorios de dependencias e artefatos (`.git`, `.dart_tool`, `build` e

@@ -8,8 +8,16 @@ class TerminalInputInterrupted implements Exception {
   const TerminalInputInterrupted();
 }
 
+class TerminalCommand {
+  const TerminalCommand(this.name, this.description);
+
+  final String name;
+  final String description;
+}
+
 /// A small, dependency-free line editor. In a terminal it keeps the current
-/// buffer visible while an `@file` completion menu is shown below it.
+/// buffer visible while an `@file` or slash-command completion menu is shown
+/// below it.
 class TerminalInput {
   TerminalInput({
     Stream<List<int>>? input,
@@ -37,6 +45,7 @@ class TerminalInput {
   Future<String?> readLine({
     required String prompt,
     FileMentionService? mentions,
+    List<TerminalCommand> commands = const [],
   }) async {
     if (prompt.contains('\n') || prompt.contains('\r')) {
       throw ArgumentError.value(
@@ -75,10 +84,8 @@ class TerminalInput {
       }
       _skipLineFeed = false;
 
-      final active = mentions?.activeMention(text, cursor);
-      var suggestions = active == null
-          ? const <String>[]
-          : mentions!.suggest(active.query);
+      var completion = _completion(text, cursor, mentions, commands);
+      var suggestions = completion?.suggestions ?? const <_Suggestion>[];
 
       if (code == 3) {
         if (interactive) _finish(prompt, text);
@@ -93,11 +100,12 @@ class TerminalInput {
         _finish(prompt, text);
         return text;
       }
-      if (code == 9 && active != null && suggestions.isNotEmpty) {
+      if (code == 9 && completion != null && suggestions.isNotEmpty) {
         final chosen = suggestions[selection.clamp(0, suggestions.length - 1)];
-        final rendered = chosen.contains(' ') ? '@"$chosen" ' : '@$chosen ';
-        setText(text.replaceRange(active.start, cursor, rendered));
-        cursor = active.start + rendered.length;
+        setText(
+          text.replaceRange(completion.start, cursor, chosen.replacement),
+        );
+        cursor = completion.start + chosen.replacement.length;
         selection = 0;
       } else if (code == 8 || code == 127) {
         if (cursor > 0) {
@@ -138,10 +146,8 @@ class TerminalInput {
         selection = 0;
       }
 
-      final nextActive = mentions?.activeMention(text, cursor);
-      suggestions = nextActive == null
-          ? const <String>[]
-          : mentions!.suggest(nextActive.query);
+      completion = _completion(text, cursor, mentions, commands);
+      suggestions = completion?.suggestions ?? const <_Suggestion>[];
       if (selection >= suggestions.length) selection = 0;
       if (interactive) {
         _render(prompt, text, cursor, suggestions, selection);
@@ -209,13 +215,13 @@ class TerminalInput {
     String prompt,
     String text,
     int cursor,
-    List<String> suggestions,
+    List<_Suggestion> suggestions,
     int selection,
   ) {
     _output.write('\r\x1b[J$prompt$text');
     for (var index = 0; index < suggestions.length; index++) {
       final marker = index == selection ? '›' : ' ';
-      _output.write('\n  $marker @${_safeDisplay(suggestions[index])}');
+      _output.write('\n  $marker ${_safeDisplay(suggestions[index].label)}');
     }
     if (suggestions.isNotEmpty) {
       _output.write('\x1b[${suggestions.length}A');
@@ -257,6 +263,54 @@ class TerminalInput {
   static bool _isLowSurrogate(int unit) => unit >= 0xdc00 && unit <= 0xdfff;
   static bool _isHighSurrogate(int unit) => unit >= 0xd800 && unit <= 0xdbff;
 
+  static _Completion? _completion(
+    String text,
+    int cursor,
+    FileMentionService? mentions,
+    List<TerminalCommand> commands,
+  ) {
+    final mention = mentions?.activeMention(text, cursor);
+    if (mention != null) {
+      final suggestions = mentions!
+          .suggest(mention.query)
+          .map((path) {
+            final replacement = path.contains(' ') ? '@"$path" ' : '@$path ';
+            return _Suggestion(replacement, '@$path');
+          })
+          .toList(growable: false);
+      return _Completion(mention.start, suggestions);
+    }
+
+    if (commands.isEmpty || cursor == 0 || !text.startsWith('/')) return null;
+    final query = text.substring(0, cursor);
+    if (query.contains(RegExp(r'\s'))) return null;
+    final normalized = query.toLowerCase();
+    final suggestions = commands
+        .where((command) => command.name.toLowerCase().startsWith(normalized))
+        .map(
+          (command) => _Suggestion(
+            '${command.name} ',
+            '${command.name}  ${command.description}',
+          ),
+        )
+        .toList(growable: false);
+    return _Completion(0, suggestions);
+  }
+
   static String _safeDisplay(String value) =>
       value.replaceAll(RegExp(r'[\x00-\x1f\x7f]'), '�');
+}
+
+class _Completion {
+  const _Completion(this.start, this.suggestions);
+
+  final int start;
+  final List<_Suggestion> suggestions;
+}
+
+class _Suggestion {
+  const _Suggestion(this.replacement, this.label);
+
+  final String replacement;
+  final String label;
 }
