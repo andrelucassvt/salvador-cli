@@ -40,6 +40,7 @@ O serviço de menções já indexa caminhos, mas não expõe hierarquia, tamanho
 
 - [x] Criar em `app/lib/src/desktop/desktop_controller.dart` o modelo imutável `WorkspaceTreeEntry` com caminho relativo, profundidade, tipo, expansão, tamanho e seleção.
 - [x] Tornar `FileMentionService.ignoredDirectories` público em `lib/src/file_mentions.dart` e indexar a raiz no controlador com `Directory.list(followLinks: false)`, sem atravessar links simbólicos.
+  > **Nota de execução:** a indexação usa `listSync` (síncrona), como o `FileMentionService` já fazia, em vez da indexação assíncrona sugerida na mitigação de risco — mantém os widget tests livres de IO real na zona FakeAsync e o comportamento é idêntico; registrado em `docs/flow/app-desktop.md`.
 - [x] Alterar `ReadFileTool.execute` em `lib/src/tools.dart` para decodificar bytes explicitamente e devolver `ERRO:` via `ToolException` para binário/UTF-8 inválido, preservando o limite de 100.000 caracteres.
 - [x] Criar no `DesktopController` um `ToolRegistry` privado com `AgentPermissions.readOnly` e ler o preview por `execute(ToolCall(name: 'read_file', ...))`, reutilizando `WorkspaceTool.resolveFile` sem abrir `File(path)` direto.
 - [x] Expor no controlador `toggleDirectory`, `setFileFilter`, `openPreview`, `closePreview` e `mentionPreviewedFile`, atualizando a árvore após troca de raiz.
