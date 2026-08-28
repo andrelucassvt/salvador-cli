@@ -1,6 +1,6 @@
 ---
 generated_at: 2026-08-28
-source_commit: pendente (migração para Clean Architecture)
+source_commit: a905f85
 source_state: clean
 verified_at: 2026-08-28
 status: current
