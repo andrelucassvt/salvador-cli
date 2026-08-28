@@ -302,7 +302,9 @@ class _SessionPanel extends StatelessWidget {
                 DropdownButtonFormField<String>(
                   key: ValueKey(controller.selectedModel),
                   initialValue:
-                      controller.models.contains(controller.selectedModel)
+                      controller.models.any(
+                        (model) => model.name == controller.selectedModel,
+                      )
                       ? controller.selectedModel
                       : null,
                   dropdownColor: _navy,
@@ -312,8 +314,11 @@ class _SessionPanel extends StatelessWidget {
                   items: controller.models
                       .map(
                         (model) => DropdownMenuItem(
-                          value: model,
-                          child: Text(model, overflow: TextOverflow.ellipsis),
+                          value: model.name,
+                          child: Text(
+                            model.name,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       )
                       .toList(growable: false),
