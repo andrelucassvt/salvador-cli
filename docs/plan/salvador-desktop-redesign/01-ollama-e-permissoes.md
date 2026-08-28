@@ -25,38 +25,38 @@
 
 > Os testes vão falhar inicialmente — isso é intencional.
 
-- [ ] Ampliar `test/ollama_client_test.dart` com `HttpServer` local para verificar parsing de nome, tamanho, família, quantização e data retornados por `/api/tags`.
-- [ ] Testar em `test/ollama_client_test.dart` a combinação de `/api/ps` com os modelos instalados, incluindo `size_vram`, `context_length`, expiração e campos ausentes.
-- [ ] Testar em `test/ollama_client_test.dart` `/api/show` para recuperar o contexto de um modelo parado sem tornar o campo obrigatório.
-- [ ] Testar em `test/ollama_client_test.dart` preload e unload via `/api/generate`, exigindo `stream: false`, prompt vazio e `keep_alive` correto.
-- [ ] Testar em `test/ollama_client_test.dart` que `/api/chat` envia temperatura, `num_ctx` e `keep_alive`, e transforma timeout/status inválido em `OllamaException`.
-- [ ] Verificação: `dart test test/ollama_client_test.dart` compila e falha somente pela ausência dos novos contratos.
+- [x] Ampliar `test/ollama_client_test.dart` com `HttpServer` local para verificar parsing de nome, tamanho, família, quantização e data retornados por `/api/tags`.
+- [x] Testar em `test/ollama_client_test.dart` a combinação de `/api/ps` com os modelos instalados, incluindo `size_vram`, `context_length`, expiração e campos ausentes.
+- [x] Testar em `test/ollama_client_test.dart` `/api/show` para recuperar o contexto de um modelo parado sem tornar o campo obrigatório.
+- [x] Testar em `test/ollama_client_test.dart` preload e unload via `/api/generate`, exigindo `stream: false`, prompt vazio e `keep_alive` correto.
+- [x] Testar em `test/ollama_client_test.dart` que `/api/chat` envia temperatura, `num_ctx` e `keep_alive`, e transforma timeout/status inválido em `OllamaException`.
+- [x] Verificação: `dart test test/ollama_client_test.dart` compila e falha somente pela ausência dos novos contratos.
 
 ### Fase 2 — Implementação do runtime Ollama
 
-- [ ] Criar em `lib/src/models.dart` os tipos `OllamaModelInfo`, `OllamaRunningModel` e `InferenceOptions`, com parsing tolerante e valores padrão para metadados opcionais.
-- [ ] Ampliar `OllamaClient` em `lib/src/ollama_client.dart` com `testConnection`, `listModels`, `listRunningModels`, `showModel`, `loadModel` e `unloadModel`, reutilizando `HttpClient` injetável.
-- [ ] Alterar `OllamaClient.chat` em `lib/src/ollama_client.dart` para aplicar `InferenceOptions` sem mudar `stream: false` nem o parsing atual de métricas/tool calls.
-- [ ] Centralizar em `lib/src/ollama_client.dart` leitura de JSON, validação de status e timeout para que todos os endpoints gerem mensagens `OllamaException` consistentes.
-- [ ] Manter `OllamaDiscovery` responsável pela presença do binário e compatibilidade da CLI, sem mover Flutter ou dependências externas para `lib/`.
-- [ ] Verificação: `dart test test/ollama_client_test.dart` passa e `dart analyze` não apresenta erros.
+- [x] Criar em `lib/src/models.dart` os tipos `OllamaModelInfo`, `OllamaRunningModel` e `InferenceOptions`, com parsing tolerante e valores padrão para metadados opcionais.
+- [x] Ampliar `OllamaClient` em `lib/src/ollama_client.dart` com `testConnection`, `listModels`, `listRunningModels`, `showModel`, `loadModel` e `unloadModel`, reutilizando `HttpClient` injetável.
+- [x] Alterar `OllamaClient.chat` em `lib/src/ollama_client.dart` para aplicar `InferenceOptions` sem mudar `stream: false` nem o parsing atual de métricas/tool calls.
+- [x] Centralizar em `lib/src/ollama_client.dart` leitura de JSON, validação de status e timeout para que todos os endpoints gerem mensagens `OllamaException` consistentes.
+- [x] Manter `OllamaDiscovery` responsável pela presença do binário e compatibilidade da CLI, sem mover Flutter ou dependências externas para `lib/`.
+- [x] Verificação: `dart test test/ollama_client_test.dart` passa e `dart analyze` não apresenta erros.
 
 ### Fase 3 — Testes das permissões e da atividade
 
 > Os testes vão falhar inicialmente — isso é intencional.
 
-- [ ] Adicionar em `test/salvador_cli_test.dart` casos que comprovem que leitura sempre permanece disponível, edição remove `write_file`/`replace_in_file` e comando remove `run_command` das definições enviadas ao modelo.
-- [ ] Testar em `test/salvador_cli_test.dart` que uma chamada forjada para ferramenta desabilitada retorna `ERRO: ferramenta nao permitida` e não toca o filesystem/processo.
-- [ ] Testar em `test/salvador_cli_test.dart` que o novo observador de conclusão recebe `ToolCall` e resultado depois da execução, preservando o observador `onToolCall` existente.
-- [ ] Verificação: `dart test test/salvador_cli_test.dart` compila e falha somente pelos novos contratos ainda ausentes.
+- [x] Adicionar em `test/salvador_cli_test.dart` casos que comprovem que leitura sempre permanece disponível, edição remove `write_file`/`replace_in_file` e comando remove `run_command` das definições enviadas ao modelo.
+- [x] Testar em `test/salvador_cli_test.dart` que uma chamada forjada para ferramenta desabilitada retorna `ERRO: ferramenta nao permitida` e não toca o filesystem/processo.
+- [x] Testar em `test/salvador_cli_test.dart` que o novo observador de conclusão recebe `ToolCall` e resultado depois da execução, preservando o observador `onToolCall` existente.
+- [x] Verificação: `dart test test/salvador_cli_test.dart` compila e falha somente pelos novos contratos ainda ausentes.
 
 ### Fase 4 — Implementação das permissões
 
-- [ ] Criar `AgentPermissions` em `lib/src/tools.dart`, com edição e comandos configuráveis, leitura sempre habilitada e constante `readOnly` para consumidores que só podem ler.
-- [ ] Alterar `ToolRegistry` em `lib/src/tools.dart` para construir somente as ferramentas permitidas e rejeitar explicitamente execuções que não estejam no registro.
-- [ ] Alterar `AgentSession` em `lib/src/agent.dart` para receber `AgentPermissions` e um `ToolResultObserver`, preservando defaults e compatibilidade da CLI.
-- [ ] Fazer `AgentSession.sendDetailed` notificar conclusão somente depois de obter o resultado textual da ferramenta, inclusive resultados `ERRO:`.
-- [ ] Verificação: `dart test test/salvador_cli_test.dart` e `dart test` passam.
+- [x] Criar `AgentPermissions` em `lib/src/tools.dart`, com edição e comandos configuráveis, leitura sempre habilitada e constante `readOnly` para consumidores que só podem ler.
+- [x] Alterar `ToolRegistry` em `lib/src/tools.dart` para construir somente as ferramentas permitidas e rejeitar explicitamente execuções que não estejam no registro.
+- [x] Alterar `AgentSession` em `lib/src/agent.dart` para receber `AgentPermissions` e um `ToolResultObserver`, preservando defaults e compatibilidade da CLI.
+- [x] Fazer `AgentSession.sendDetailed` notificar conclusão somente depois de obter o resultado textual da ferramenta, inclusive resultados `ERRO:`.
+- [x] Verificação: `dart test test/salvador_cli_test.dart` e `dart test` passam.
 
 ### Fase 5 — Integridade da parte
 

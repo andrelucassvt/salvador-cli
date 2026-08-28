@@ -111,6 +111,126 @@ void main() {
     expect(client.requests.first.last.content, contains('arquivo mencionado'));
     expect(client.requests.first.last.content, contains('\na\n'));
   });
+
+  test(
+    'leitura permanece disponivel com permissao de somente leitura',
+    () async {
+      final client = FakeChatClient([
+        AgentMessage(role: 'assistant', content: 'ok'),
+      ]);
+      final session = AgentSession(
+        client: client,
+        root: root,
+        permissions: AgentPermissions.readOnly,
+      );
+
+      await session.send('oi');
+
+      expect(client.toolRequests.single.map((tool) => tool.name), [
+        'read_file',
+      ]);
+    },
+  );
+
+  test(
+    'edicao e comando sao removidos das definicoes conforme permissao',
+    () async {
+      final client = FakeChatClient([
+        AgentMessage(role: 'assistant', content: 'ok'),
+      ]);
+      final session = AgentSession(
+        client: client,
+        root: root,
+        permissions: const AgentPermissions(allowEdit: false),
+      );
+
+      await session.send('oi');
+
+      final names = client.toolRequests.single
+          .map((tool) => tool.name)
+          .toList();
+      expect(names, contains('read_file'));
+      expect(names, contains('run_command'));
+      expect(names, isNot(contains('write_file')));
+      expect(names, isNot(contains('replace_in_file')));
+    },
+  );
+
+  test(
+    'chamada forjada para edicao desabilitada nao toca o filesystem',
+    () async {
+      final registry = ToolRegistry(
+        root,
+        permissions: const AgentPermissions(allowEdit: false),
+      );
+
+      final result = await registry.execute(
+        ToolCall(
+          name: 'write_file',
+          arguments: {'path': 'nao.txt', 'content': 'nao'},
+        ),
+      );
+
+      expect(result, contains('ferramenta nao permitida'));
+      expect(File('${root.path}/nao.txt').existsSync(), isFalse);
+    },
+  );
+
+  test(
+    'chamada forjada para comando desabilitado nao executa processo',
+    () async {
+      final registry = ToolRegistry(
+        root,
+        permissions: const AgentPermissions(allowCommands: false),
+      );
+
+      final result = await registry.execute(
+        ToolCall(name: 'run_command', arguments: {'command': 'echo x'}),
+      );
+
+      expect(result, contains('ferramenta nao permitida'));
+    },
+  );
+
+  test(
+    'observador de conclusao recebe chamada e resultado, inclusive ERRO',
+    () async {
+      final client = FakeChatClient([
+        AgentMessage(
+          role: 'assistant',
+          toolCalls: [
+            ToolCall(
+              name: 'write_file',
+              arguments: {'path': 'ok.txt', 'content': 'x'},
+            ),
+            ToolCall(name: 'read_file', arguments: {'path': 'ausente.txt'}),
+          ],
+        ),
+        AgentMessage(role: 'assistant', content: 'fim'),
+      ]);
+      final startedCalls = <String>[];
+      final finishedCalls = <String>[];
+      final finishedResults = <String>[];
+      final session = AgentSession(
+        client: client,
+        root: root,
+        onToolCall: (call) => startedCalls.add(call.name),
+        onToolResult: (call, result) {
+          finishedCalls.add(call.name);
+          finishedResults.add(result);
+        },
+      );
+
+      await session.send('grava e le');
+
+      expect(startedCalls, ['write_file', 'read_file']);
+      expect(finishedCalls, ['write_file', 'read_file']);
+      expect(finishedResults, hasLength(2));
+      expect(finishedResults.first, contains('OK: arquivo gravado'));
+      expect(finishedResults.last, contains('ERRO:'));
+      expect(File('${root.path}/ok.txt').readAsStringSync(), 'x');
+    },
+  );
 }
 
 class FakeChatClient implements ChatClient {
@@ -118,6 +238,7 @@ class FakeChatClient implements ChatClient {
 
   final List<AgentMessage> responses;
   final List<List<AgentMessage>> requests = [];
+  final List<List<ToolDefinition>> toolRequests = [];
   var _index = 0;
 
   @override
@@ -126,6 +247,7 @@ class FakeChatClient implements ChatClient {
     required List<ToolDefinition> tools,
   }) async {
     requests.add(List.of(messages));
+    toolRequests.add(List.of(tools));
     return responses[_index++];
   }
 }

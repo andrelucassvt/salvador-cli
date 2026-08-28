@@ -198,3 +198,94 @@ class ToolDefinition {
     },
   };
 }
+
+/// Parametros de inferencia aplicados a toda chamada de chat do cliente.
+/// [temperature] preserva o default atual de 0.1; os demais campos so sao
+/// enviados ao Ollama quando definidos.
+class InferenceOptions {
+  const InferenceOptions({
+    this.temperature = 0.1,
+    this.contextLength,
+    this.keepAlive,
+    this.timeout,
+  });
+
+  final double temperature;
+  final int? contextLength;
+  final Duration? keepAlive;
+  final Duration? timeout;
+}
+
+/// Modelo instalado, conforme retornado por `/api/tags`.
+class OllamaModelInfo {
+  const OllamaModelInfo({
+    required this.name,
+    this.sizeBytes = 0,
+    this.family,
+    this.quantization,
+    this.modifiedAt,
+  });
+
+  factory OllamaModelInfo.fromJson(Map<String, Object?> json) {
+    final details = json['details'];
+    final detailsMap = details is Map
+        ? details.cast<String, Object?>()
+        : const <String, Object?>{};
+    return OllamaModelInfo(
+      name: json['name'] as String? ?? '',
+      sizeBytes: _integer(json['size']),
+      family: detailsMap['family'] as String?,
+      quantization: detailsMap['quantization_level'] as String?,
+      modifiedAt: _dateTime(json['modified_at']),
+    );
+  }
+
+  final String name;
+  final int sizeBytes;
+  final String? family;
+  final String? quantization;
+  final DateTime? modifiedAt;
+}
+
+/// Modelo carregado na memoria, conforme retornado por `/api/ps`.
+/// [isInstalled] vem da combinacao com a lista de modelos instalados,
+/// pois o Ollama mantem modelos carregados mesmo depois de removidos.
+class OllamaRunningModel {
+  const OllamaRunningModel({
+    required this.name,
+    this.model,
+    this.sizeBytes = 0,
+    this.sizeVramBytes = 0,
+    this.contextLength = 0,
+    this.expiresAt,
+    this.isInstalled = false,
+  });
+
+  factory OllamaRunningModel.fromJson(
+    Map<String, Object?> json, {
+    Set<String> installedNames = const {},
+  }) => OllamaRunningModel(
+    name: json['name'] as String? ?? '',
+    model: json['model'] as String?,
+    sizeBytes: _integer(json['size']),
+    sizeVramBytes: _integer(json['size_vram']),
+    contextLength: _integer(json['context_length']),
+    expiresAt: _dateTime(json['expires_at']),
+    isInstalled: installedNames.contains(json['name']),
+  );
+
+  final String name;
+  final String? model;
+  final int sizeBytes;
+  final int sizeVramBytes;
+  final int contextLength;
+  final DateTime? expiresAt;
+  final bool isInstalled;
+}
+
+int _integer(Object? value) => value is num ? value.toInt() : 0;
+
+DateTime? _dateTime(Object? value) {
+  if (value is! String) return null;
+  return DateTime.tryParse(value);
+}

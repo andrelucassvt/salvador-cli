@@ -7,6 +7,7 @@ import 'prompt.dart';
 import 'tools.dart';
 
 typedef ToolCallObserver = void Function(ToolCall call);
+typedef ToolResultObserver = void Function(ToolCall call, String result);
 
 class AgentSession {
   AgentSession({
@@ -14,7 +15,9 @@ class AgentSession {
     required Directory root,
     this.maxToolRounds = 8,
     this.onToolCall,
-  }) : _tools = ToolRegistry(root),
+    this.onToolResult,
+    AgentPermissions permissions = const AgentPermissions(),
+  }) : _tools = ToolRegistry(root, permissions: permissions),
        _mentions = FileMentionService(root),
        _systemMessage = AgentMessage(
          role: 'system',
@@ -29,6 +32,7 @@ class AgentSession {
   final AgentMessage _systemMessage;
   final int maxToolRounds;
   final ToolCallObserver? onToolCall;
+  final ToolResultObserver? onToolResult;
   final List<AgentMessage> _messages = [];
 
   List<AgentMessage> get messages => List.unmodifiable(_messages);
@@ -77,6 +81,7 @@ class AgentSession {
       for (final call in response.toolCalls) {
         onToolCall?.call(call);
         final result = await _tools.execute(call);
+        onToolResult?.call(call, result);
         _messages.add(
           AgentMessage(role: 'tool', content: result, toolName: call.name),
         );

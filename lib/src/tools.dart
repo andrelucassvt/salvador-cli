@@ -10,15 +10,40 @@ abstract interface class AgentTool {
   Future<String> execute(Map<String, Object?> arguments);
 }
 
-class ToolRegistry {
-  ToolRegistry(Directory root)
-    : _tools = [
-        ReadFileTool(root),
-        WriteFileTool(root),
-        ReplaceInFileTool(root),
-        RunCommandTool(root),
-      ];
+/// Controla quais ferramentas sao expostas ao modelo e aceitas na execucao.
+/// A leitura de arquivos esta sempre disponivel; edicao e comandos podem ser
+/// removidos. [readOnly] cobre os consumidores que so podem ler.
+class AgentPermissions {
+  const AgentPermissions({this.allowEdit = true, this.allowCommands = true});
 
+  static const readOnly = AgentPermissions(
+    allowEdit: false,
+    allowCommands: false,
+  );
+
+  final bool allowEdit;
+  final bool allowCommands;
+
+  bool allows(String toolName) => switch (toolName) {
+    'write_file' || 'replace_in_file' => allowEdit,
+    'run_command' => allowCommands,
+    _ => true,
+  };
+}
+
+class ToolRegistry {
+  ToolRegistry(
+    Directory root, {
+    AgentPermissions permissions = const AgentPermissions(),
+  }) : _permissions = permissions,
+       _tools = [
+         ReadFileTool(root),
+         if (permissions.allowEdit) WriteFileTool(root),
+         if (permissions.allowEdit) ReplaceInFileTool(root),
+         if (permissions.allowCommands) RunCommandTool(root),
+       ];
+
+  final AgentPermissions _permissions;
   final List<AgentTool> _tools;
 
   List<ToolDefinition> get definitions =>
@@ -28,7 +53,12 @@ class ToolRegistry {
     final tool = _tools.where(
       (candidate) => candidate.definition.name == call.name,
     );
-    if (tool.isEmpty) return 'ERRO: ferramenta desconhecida: ${call.name}';
+    if (tool.isEmpty) {
+      if (!_permissions.allows(call.name)) {
+        return 'ERRO: ferramenta nao permitida: ${call.name}';
+      }
+      return 'ERRO: ferramenta desconhecida: ${call.name}';
+    }
 
     try {
       return await tool.single.execute(call.arguments);
