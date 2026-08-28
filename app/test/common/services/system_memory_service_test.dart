@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:salvador_desktop/src/desktop/system_memory.dart';
+import 'package:salvador_desktop/common/services/system_memory_service.dart';
 
 void main() {
   test('parseFreePages extrai paginas livres do vm_stat', () {

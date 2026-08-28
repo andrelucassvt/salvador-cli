@@ -24,6 +24,8 @@
 | `app/test/common/services/desktop_storage_service_test.dart` | mover/adaptar de `app/test/desktop_state_store_test.dart` | mesmos cenários, tipos novos |
 | `app/test/common/services/system_memory_service_test.dart` | mover de `app/test/system_memory_test.dart` | sem mudança de comportamento |
 
+**Nota de execução (drift registrado):** o fake de cada DataSource precisa `implements` o tipo real para o `RepositoryImpl` compilar contra ele (mesma exigência de `testing.md`), então as assinaturas públicas dos 3 DataSources da Fase 3 foram escritas junto com os fakes da Fase 1, antes do RepositoryImpl — só a fase de "fazer os testes passarem" (Fase 4) ficou estritamente depois. Além disso, `WorkspaceRepositoryImpl.readFile` calcula `sizeBytes` a partir de `utf8.encode(content).length` (bytes do conteúdo já lido pela ferramenta confinada) em vez do valor cacheado na última indexação da árvore (`desktop_controller.dart:776-786`) — mais preciso e sem introduzir um segundo acesso a arquivo fora de `ToolRegistry`/`WorkspaceTool.resolveFile`, que o `AGENTS.md` proíbe para ferramentas novas. Também foi necessário atualizar `app/test/desktop_controller_test.dart` e `app/test/salvador_desktop_app_test.dart` (tipos `DesktopStateStore`/`DesktopPersistedState`/`PersistedSessionSummary` → `DesktopStorageService`/`DesktopPreferencesEntity`/`PersistedSessionSummaryEntity`) já nesta parte, não só na Parte 6: esses dois arquivos importavam `desktop_state_store.dart` diretamente e quebrariam a suíte inteira assim que o arquivo fosse removido — a mudança foi mecânica (só nomes), sem alterar a estratégia desses testes (que continua usando `DesktopController`, substituída de fato só na Parte 6).
+
 **Nota de design (registrada, não decidida silenciosamente):** `AgentSession` (pacote `salvador_cli`) é stateful — mantém histórico da conversa internamente e expõe um callback `onToolResult` síncrono, não um par requisição/resposta puro. `ChatRepository` foge por isso do molde "todo método é uma chamada stateless" do `data.md`: expõe `configureSession(...)` (recria a sessão), `Stream<ToolActivityEntity> get toolActivity` (adapta o callback `onToolResult` para stream, para o `ChatCubit` da Parte 4 escutar em vez de receber uma closure) e `send`/`clearSession`. Ainda assim retorna `Result<T>` e classifica erros em `AppException`, preservando o restante do contrato.
 
 ## Fases
@@ -32,52 +34,52 @@
 
 > Os testes vão falhar inicialmente — isso é intencional.
 
-- [ ] Passo 1: Criar `app/test/data/ollama/fakes/fake_ollama_remote_datasource.dart` (`implements OllamaRemoteDataSource`, com campos `shouldThrow`/exceção customizável) e `app/test/data/ollama/ollama_repository_impl_test.dart` cobrindo: `testConnection` sucesso e `SocketException` → `NetworkException`; `listModels` sucesso e lista vazia (hoje vira `OllamaException` em `desktop_controller.dart:596-599`) → `OllamaServerException`
-- [ ] Passo 2: Criar `app/test/data/chat/fakes/fake_chat_agent_datasource.dart` e `app/test/data/chat/chat_repository_impl_test.dart` cobrindo: `send` sucesso retornando `AgentTurnResult`; `send` com `AgentException` → `AgentFailureException`; `toolActivity` emite um evento após uma chamada de ferramenta simulada no fake
-- [ ] Passo 3: Criar `app/test/data/workspace/fakes/fake_workspace_datasource.dart` e `app/test/data/workspace/workspace_repository_impl_test.dart` cobrindo: `listTree` sucesso; `readFile` com resultado `ERRO:` do `ToolRegistry` (comportamento de `desktop_controller.dart:767-790`) → `Result.error` com `FileSystemFailureException`
-- [ ] Verificação: `cd app && flutter test test/data/` falha por classes/arquivos ainda não implementados (erro de compilação nomeado)
+- [x] Passo 1: Criar `app/test/data/ollama/fakes/fake_ollama_remote_datasource.dart` (`implements OllamaRemoteDataSource`, com campos `shouldThrow`/exceção customizável) e `app/test/data/ollama/ollama_repository_impl_test.dart` cobrindo: `testConnection` sucesso e `SocketException` → `NetworkException`; `listModels` sucesso e lista vazia (hoje vira `OllamaException` em `desktop_controller.dart:596-599`) → `OllamaServerException`
+- [x] Passo 2: Criar `app/test/data/chat/fakes/fake_chat_agent_datasource.dart` e `app/test/data/chat/chat_repository_impl_test.dart` cobrindo: `send` sucesso retornando `AgentTurnResult`; `send` com `AgentException` → `AgentFailureException`; `toolActivity` emite um evento após uma chamada de ferramenta simulada no fake
+- [x] Passo 3: Criar `app/test/data/workspace/fakes/fake_workspace_datasource.dart` e `app/test/data/workspace/workspace_repository_impl_test.dart` cobrindo: `listTree` sucesso; `readFile` com resultado `ERRO:` do `ToolRegistry` (comportamento de `desktop_controller.dart:767-790`) → `Result.error` com `FileSystemFailureException`
+- [x] Verificação: `cd app && flutter test test/data/` falha por classes/arquivos ainda não implementados (erro de compilação nomeado)
 
 ### Fase 2 — Interfaces de domínio
 
-- [ ] Passo 1: `ollama_repository.dart` — `abstract class OllamaRepository { Future<Result<void>> testConnection({required Uri host}); Future<Result<List<OllamaModelInfo>>> listModels({required Uri host}); Future<Result<List<OllamaRunningModel>>> listRunningModels({required Uri host, required List<OllamaModelInfo> installed}); Future<Result<void>> loadModel({required Uri host, required String model, required Duration keepAlive}); Future<Result<void>> unloadModel({required Uri host, required String model}); Future<Result<int?>> showModelContext({required Uri host, required String model}); }`
-- [ ] Passo 2: `chat_repository.dart` — `abstract class ChatRepository { void configureSession({required Uri host, required String model, required InferenceOptions options, required Directory root, required AgentPermissions permissions}); Stream<ToolActivityEntity> get toolActivity; Future<Result<AgentTurnResult>> send(String message); void clearSession(); }`
-- [ ] Passo 3: `workspace_repository.dart` — `abstract class WorkspaceRepository { Future<Result<List<WorkspaceTreeEntryEntity>>> listTree({required Directory root}); Future<Result<FilePreviewEntity>> readFile({required Directory root, required String path}); List<String> fileSuggestions({required Directory root, required String input, required int cursor, int limit}); String insertMention({required Directory root, required String input, required int cursor, required String path}); }` (os dois últimos métodos são síncronos — portam `desktop_controller.dart:524-535`, sem I/O)
-- [ ] Verificação: `cd app && flutter analyze lib/domain/` sem erros
+- [x] Passo 1: `ollama_repository.dart` — `abstract class OllamaRepository { Future<Result<void>> testConnection({required Uri host}); Future<Result<List<OllamaModelInfo>>> listModels({required Uri host}); Future<Result<List<OllamaRunningModel>>> listRunningModels({required Uri host, required List<OllamaModelInfo> installed}); Future<Result<void>> loadModel({required Uri host, required String model, required Duration keepAlive}); Future<Result<void>> unloadModel({required Uri host, required String model}); Future<Result<int?>> showModelContext({required Uri host, required String model}); }`
+- [x] Passo 2: `chat_repository.dart` — `abstract class ChatRepository { void configureSession({required Uri host, required String model, required InferenceOptions options, required Directory root, required AgentPermissions permissions}); Stream<ToolActivityEntity> get toolActivity; Future<Result<AgentTurnResult>> send(String message); void clearSession(); }`
+- [x] Passo 3: `workspace_repository.dart` — `abstract class WorkspaceRepository { Future<Result<List<WorkspaceTreeEntryEntity>>> listTree({required Directory root}); Future<Result<FilePreviewEntity>> readFile({required Directory root, required String path}); List<String> fileSuggestions({required Directory root, required String input, required int cursor, int limit}); String insertMention({required Directory root, required String input, required int cursor, required String path}); }` (os dois últimos métodos são síncronos — portam `desktop_controller.dart:524-535`, sem I/O)
+- [x] Verificação: `cd app && flutter analyze lib/domain/` sem erros
 
 ### Fase 3 — DataSources
 
-- [ ] Passo 1: `ollama_remote_datasource.dart` — construtor recebe uma factory de `OllamaClient` (mesmo padrão de `OllamaClientFactory` em `desktop_controller.dart:15-20`, injetável para teste); métodos recriam o client por chamada com `host`/`model`/`options`, espelhando `_performConnect`/`selectModel`/`startModel` atuais
-- [ ] Passo 2: `chat_agent_datasource.dart` — mantém internamente uma `AgentSession?`; `configureSession` a reconstrói (porta `_rebuildSession()` de `desktop_controller.dart:640-656`, incluindo o callback `onToolResult` alimentando um `StreamController<ToolActivityEntity>` broadcast); `send` delega a `sendDetailed`
-- [ ] Passo 3: `workspace_datasource.dart` — mantém `FileMentionService`/`ToolRegistry` reconstruídos por `root` (porta `_resetWorkspaceContext()`); `listTree` porta `_visitDirectory` (`desktop_controller.dart:697-743`, `followLinks: false`, ignora `FileMentionService.ignoredDirectories`); `readFile` chama `ToolRegistry.execute(ToolCall(name: 'read_file', ...))` com `AgentPermissions.readOnly`
-- [ ] Verificação: `cd app && flutter analyze lib/data/datasources/` sem erros
+- [x] Passo 1: `ollama_remote_datasource.dart` — construtor recebe uma factory de `OllamaClient` (mesmo padrão de `OllamaClientFactory` em `desktop_controller.dart:15-20`, injetável para teste); métodos recriam o client por chamada com `host`/`model`/`options`, espelhando `_performConnect`/`selectModel`/`startModel` atuais
+- [x] Passo 2: `chat_agent_datasource.dart` — mantém internamente uma `AgentSession?`; `configureSession` a reconstrói (porta `_rebuildSession()` de `desktop_controller.dart:640-656`, incluindo o callback `onToolResult` alimentando um `StreamController<ToolActivityEntity>` broadcast); `send` delega a `sendDetailed`
+- [x] Passo 3: `workspace_datasource.dart` — mantém `FileMentionService`/`ToolRegistry` reconstruídos por `root` (porta `_resetWorkspaceContext()`); `listTree` porta `_visitDirectory` (`desktop_controller.dart:697-743`, `followLinks: false`, ignora `FileMentionService.ignoredDirectories`); `readFile` chama `ToolRegistry.execute(ToolCall(name: 'read_file', ...))` com `AgentPermissions.readOnly`
+- [x] Verificação: `cd app && flutter analyze lib/data/datasources/` sem erros
 
 ### Fase 4 — RepositoryImpl (fazendo os testes da Fase 1 passarem)
 
-- [ ] Passo 1: `ollama_repository_impl.dart` com `RepositoryErrorMapper`-equivalente local: `try/catch (error, stackTrace)` em cada método, classificando `SocketException` → `NetworkException`, `OllamaException` → `OllamaServerException`, lista de modelos vazia → `OllamaServerException` (porta a regra de `desktop_controller.dart:595-599`)
-- [ ] Passo 2: `chat_repository_impl.dart` — delega ao `ChatAgentDataSource`, classifica `AgentException` → `AgentFailureException`, `SocketException`/`OllamaException` → os mesmos tipos do passo anterior; `toolActivity` repassa o stream do DataSource sem transformação
-- [ ] Passo 3: `workspace_repository_impl.dart` — classifica resultado `ERRO:` do `ToolRegistry` em `FileSystemFailureException` preservando a mensagem (porta `desktop_controller.dart:771-774`)
-- [ ] Passo 4: Rodar os testes da Fase 1 contra as implementações reais
-- [ ] Verificação: `cd app && flutter test test/data/` passa
+- [x] Passo 1: `ollama_repository_impl.dart` com `RepositoryErrorMapper`-equivalente local: `try/catch (error, stackTrace)` em cada método, classificando `SocketException` → `NetworkException`, `OllamaException` → `OllamaServerException`, lista de modelos vazia → `OllamaServerException` (porta a regra de `desktop_controller.dart:595-599`)
+- [x] Passo 2: `chat_repository_impl.dart` — delega ao `ChatAgentDataSource`, classifica `AgentException` → `AgentFailureException`, `SocketException`/`OllamaException` → os mesmos tipos do passo anterior; `toolActivity` repassa o stream do DataSource sem transformação
+- [x] Passo 3: `workspace_repository_impl.dart` — classifica resultado `ERRO:` do `ToolRegistry` em `FileSystemFailureException` preservando a mensagem (porta `desktop_controller.dart:771-774`)
+- [x] Passo 4: Rodar os testes da Fase 1 contra as implementações reais
+- [x] Verificação: `cd app && flutter test test/data/` passa
 
 ### Fase 5 — DesktopStorageService e SystemMemoryService
 
-- [ ] Passo 1: Mover `app/lib/src/desktop/desktop_state_store.dart` para `app/lib/common/services/desktop_storage_service.dart`; renomear `DesktopStateStore` → `DesktopStorageService`; trocar `DesktopPersistedState`/`PersistedSessionSummary` internos pelas entidades `DesktopPreferencesEntity`/`PersistedSessionSummaryEntity` da Parte 1 nas assinaturas de `load()`/`save()`, mantendo `_fromJson`/`_toJson` como estão (mesma lógica de leitura defensiva e gravação atômica)
-- [ ] Passo 2: Mover `app/test/desktop_state_store_test.dart` para `app/test/common/services/desktop_storage_service_test.dart`, ajustando só os nomes de classe/tipo — os casos de teste (arquivo ausente, versão desconhecida, gravação atômica, normalização de recentes/sessões) continuam os mesmos
-- [ ] Passo 3: Mover `app/lib/src/desktop/system_memory.dart` para `app/lib/common/services/system_memory_service.dart` e `app/test/system_memory_test.dart` para `app/test/common/services/system_memory_service_test.dart`, sem alterar a implementação (`SystemMemoryReader` já segue o padrão de Service: dependências injetáveis via construtor)
-- [ ] Verificação: `cd app && flutter test test/common/services/` passa
+- [x] Passo 1: Mover `app/lib/src/desktop/desktop_state_store.dart` para `app/lib/common/services/desktop_storage_service.dart`; renomear `DesktopStateStore` → `DesktopStorageService`; trocar `DesktopPersistedState`/`PersistedSessionSummary` internos pelas entidades `DesktopPreferencesEntity`/`PersistedSessionSummaryEntity` da Parte 1 nas assinaturas de `load()`/`save()`, mantendo `_fromJson`/`_toJson` como estão (mesma lógica de leitura defensiva e gravação atômica)
+- [x] Passo 2: Mover `app/test/desktop_state_store_test.dart` para `app/test/common/services/desktop_storage_service_test.dart`, ajustando só os nomes de classe/tipo — os casos de teste (arquivo ausente, versão desconhecida, gravação atômica, normalização de recentes/sessões) continuam os mesmos
+- [x] Passo 3: Mover `app/lib/src/desktop/system_memory.dart` para `app/lib/common/services/system_memory_service.dart` e `app/test/system_memory_test.dart` para `app/test/common/services/system_memory_service_test.dart`, sem alterar a implementação (`SystemMemoryReader` já segue o padrão de Service: dependências injetáveis via construtor)
+- [x] Verificação: `cd app && flutter test test/common/services/` passa
 
 ### Fase 6 — Checkpoint
 
-- [ ] Checkpoint: commit das mudanças da parte ("domain: interfaces de repository; data: datasources/repositoryimpl/storage service") + resumo curto do que ficou pronto, seguindo direto para a Parte 3
+- [x] Checkpoint: commit das mudanças da parte ("domain: interfaces de repository; data: datasources/repositoryimpl/storage service") + resumo curto do que ficou pronto, seguindo direto para a Parte 3
 
 ## Critérios de Sucesso
 
-- [ ] As 3 interfaces de Repository criadas em `domain/interfaces/`, retornando `Result<T>`, sem import de infraestrutura
-- [ ] Os 3 DataSources encapsulam as classes do pacote `salvador_cli` sem tratar erros (erro propaga para o RepositoryImpl)
-- [ ] Os 3 RepositoryImpl classificam toda falha em `AppException` com `try/catch (error, stackTrace)`
-- [ ] `DesktopStorageService`/`SystemMemoryService` relocados para `common/services/` com o mesmo comportamento observável de antes
-- [ ] Build sem erros
-- [ ] Todos os testes unitários da parte passando (RepositoryImpl com fakes + services movidos)
+- [x] As 3 interfaces de Repository criadas em `domain/interfaces/`, retornando `Result<T>`, sem import de infraestrutura
+- [x] Os 3 DataSources encapsulam as classes do pacote `salvador_cli` sem tratar erros (erro propaga para o RepositoryImpl)
+- [x] Os 3 RepositoryImpl classificam toda falha em `AppException` com `try/catch (error, stackTrace)`
+- [x] `DesktopStorageService`/`SystemMemoryService` relocados para `common/services/` com o mesmo comportamento observável de antes
+- [x] Build sem erros
+- [x] Todos os testes unitários da parte passando (RepositoryImpl com fakes + services movidos)
 
 ## Riscos e Mitigações
 

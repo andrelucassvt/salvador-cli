@@ -2,10 +2,10 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:salvador_cli/salvador_cli.dart';
+import 'package:salvador_desktop/domain/entities/persisted_session_summary_entity.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'desktop_controller.dart';
-import 'desktop_state_store.dart';
 
 const _navy = Color(0xFF103B54);
 const _deepNavy = Color(0xFF082C40);
@@ -2251,7 +2251,7 @@ class _ActivityPanel extends StatelessWidget {
 class _SessionTile extends StatelessWidget {
   const _SessionTile({required this.session, required this.current});
 
-  final PersistedSessionSummary session;
+  final PersistedSessionSummaryEntity session;
   final bool current;
 
   @override

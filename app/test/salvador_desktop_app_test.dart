@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salvador_cli/salvador_cli.dart';
 import 'package:salvador_desktop/src/desktop/desktop_controller.dart';
-import 'package:salvador_desktop/src/desktop/desktop_state_store.dart';
+import 'package:salvador_desktop/common/services/desktop_storage_service.dart';
+import 'package:salvador_desktop/domain/entities/desktop_preferences_entity.dart';
+import 'package:salvador_desktop/domain/entities/persisted_session_summary_entity.dart';
 import 'package:salvador_desktop/src/desktop/salvador_desktop_app.dart';
-import 'package:salvador_desktop/src/desktop/system_memory.dart';
+import 'package:salvador_desktop/common/services/system_memory_service.dart';
 
 void main() {
   final tempDirs = <Directory>[];
@@ -245,7 +247,7 @@ void main() {
       ),
     );
     controller.sessions = [
-      PersistedSessionSummary(
+      PersistedSessionSummaryEntity(
         title: 'Sessao antiga',
         startedAt: DateTime(2026, 8, 27),
         actionCount: 4,
@@ -448,16 +450,16 @@ Future<void> tapPreview(WidgetTester tester, Finder finder) async {
   await tester.pumpAndSettle();
 }
 
-class _NoIoStore extends DesktopStateStore {
+class _NoIoStore extends DesktopStorageService {
   _NoIoStore() : super(file: File('/tmp/salvador_shell_test_noop.json'));
 
-  DesktopPersistedState? lastSaved;
+  DesktopPreferencesEntity? lastSaved;
 
   @override
-  Future<DesktopPersistedState> load() async => const DesktopPersistedState();
+  Future<DesktopPreferencesEntity> load() async => const DesktopPreferencesEntity();
 
   @override
-  Future<void> save(DesktopPersistedState state) async {
+  Future<void> save(DesktopPreferencesEntity state) async {
     lastSaved = state;
   }
 }

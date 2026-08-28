@@ -3,9 +3,9 @@ import 'package:salvador_desktop/config/error/app_exception.dart';
 sealed class Result<T> {
   const Result();
 
-  factory Result.ok(T value) = Ok<T>;
+  const factory Result.ok(T value) = Ok<T>;
 
-  factory Result.error(AppException error) = Error<T>;
+  const factory Result.error(AppException error) = Error<T>;
 
   bool get isOk => this is Ok<T>;
 

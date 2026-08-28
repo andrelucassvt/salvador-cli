@@ -3,8 +3,10 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:salvador_cli/salvador_cli.dart';
 
-import 'desktop_state_store.dart';
-import 'system_memory.dart';
+import 'package:salvador_desktop/common/services/desktop_storage_service.dart';
+import 'package:salvador_desktop/common/services/system_memory_service.dart';
+import 'package:salvador_desktop/domain/entities/desktop_preferences_entity.dart';
+import 'package:salvador_desktop/domain/entities/persisted_session_summary_entity.dart';
 
 enum OllamaConnectionState { idle, loading, ready, failed }
 
@@ -116,13 +118,13 @@ class DesktopController extends ChangeNotifier {
   DesktopController({
     Directory? initialRoot,
     Uri? initialHost,
-    DesktopStateStore? store,
+    DesktopStorageService? store,
     OllamaClientFactory? clientFactory,
     SystemMemoryReader? memoryReader,
     DateTime Function()? clock,
   }) : root = (initialRoot ?? Directory.current).absolute,
        host = initialHost ?? Uri.parse('http://127.0.0.1:11434'),
-       _store = store ?? DesktopStateStore(),
+       _store = store ?? DesktopStorageService(),
        _clientFactory = clientFactory ?? _defaultClientFactory,
        _memoryReader = memoryReader ?? SystemMemoryReader(),
        _clock = clock ?? DateTime.now,
@@ -155,7 +157,7 @@ class DesktopController extends ChangeNotifier {
   bool allowCommands = true;
 
   List<String> recentRoots = const [];
-  List<PersistedSessionSummary> sessions = const [];
+  List<PersistedSessionSummaryEntity> sessions = const [];
   HostTestResult? lastTestResult;
   FilePreview? preview;
   String? previewError;
@@ -166,7 +168,7 @@ class DesktopController extends ChangeNotifier {
   final List<ChatEntry> messages = [];
   final List<ToolActivity> activities = [];
 
-  final DesktopStateStore _store;
+  final DesktopStorageService _store;
   final OllamaClientFactory _clientFactory;
   final SystemMemoryReader _memoryReader;
   final DateTime Function() _clock;
@@ -483,7 +485,7 @@ class DesktopController extends ChangeNotifier {
           ? firstPrompt.substring(0, _maxSessionTitleLength)
           : firstPrompt;
       sessions = [
-        PersistedSessionSummary(
+        PersistedSessionSummaryEntity(
           title: title,
           startedAt: _sessionStartedAt ?? _clock(),
           actionCount: activities.length,
@@ -508,13 +510,13 @@ class DesktopController extends ChangeNotifier {
 
   Future<int?> fetchModelContext(String name) async => _client?.showModel(name);
 
-  PersistedSessionSummary? get currentSessionSummary {
+  PersistedSessionSummaryEntity? get currentSessionSummary {
     final firstPrompt = _sessionFirstPrompt;
     if (firstPrompt == null) return null;
     final title = firstPrompt.length > _maxSessionTitleLength
         ? firstPrompt.substring(0, _maxSessionTitleLength)
         : firstPrompt;
-    return PersistedSessionSummary(
+    return PersistedSessionSummaryEntity(
       title: title,
       startedAt: _sessionStartedAt ?? _clock(),
       actionCount: activities.length,
@@ -656,7 +658,7 @@ class DesktopController extends ChangeNotifier {
   }
 
   Future<void> _persist() => _store.save(
-    DesktopPersistedState(
+    DesktopPreferencesEntity(
       host: host,
       model: selectedModel,
       inference: inference,

@@ -3,7 +3,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salvador_cli/salvador_cli.dart';
-import 'package:salvador_desktop/src/desktop/desktop_state_store.dart';
+import 'package:salvador_desktop/common/services/desktop_storage_service.dart';
+import 'package:salvador_desktop/domain/entities/desktop_preferences_entity.dart';
+import 'package:salvador_desktop/domain/entities/persisted_session_summary_entity.dart';
 
 void main() {
   late Directory tempDir;
@@ -21,8 +23,8 @@ void main() {
   test(
     'round-trip de preferencias, parametros, permissoes e pasta ativa',
     () async {
-      final store = DesktopStateStore(file: stateFile);
-      final state = DesktopPersistedState(
+      final store = DesktopStorageService(file: stateFile);
+      final state = DesktopPreferencesEntity(
         host: Uri.parse('http://192.168.0.10:11434'),
         model: 'llama3.2:3b',
         inference: InferenceOptions(
@@ -38,7 +40,7 @@ void main() {
         activeRoot: '/projetos/salvador',
         recentRoots: ['/projetos/salvador', '/projetos/outro'],
         sessions: [
-          PersistedSessionSummary(
+          PersistedSessionSummaryEntity(
             title: 'Primeira sessao',
             startedAt: DateTime(2026, 8, 20, 10, 30),
             actionCount: 5,
@@ -47,7 +49,7 @@ void main() {
       );
 
       await store.save(state);
-      final restored = await DesktopStateStore(file: stateFile).load();
+      final restored = await DesktopStorageService(file: stateFile).load();
 
       expect(restored.host, state.host);
       expect(restored.model, state.model);
@@ -67,13 +69,13 @@ void main() {
   );
 
   test('deduplica pastas recentes e retem os resumos mais novos', () async {
-    final store = DesktopStateStore(file: stateFile);
+    final store = DesktopStorageService(file: stateFile);
     final oldest = DateTime(2026, 1, 1);
-    final state = DesktopPersistedState(
+    final state = DesktopPreferencesEntity(
       recentRoots: ['/b', '/a', '/b', '/a'],
       sessions: [
         for (var i = 0; i < 25; i++)
-          PersistedSessionSummary(
+          PersistedSessionSummaryEntity(
             title: 'sessao $i',
             startedAt: oldest.add(Duration(days: i)),
             actionCount: i,
@@ -82,7 +84,7 @@ void main() {
     );
 
     await store.save(state);
-    final restored = await DesktopStateStore(file: stateFile).load();
+    final restored = await DesktopStorageService(file: stateFile).load();
 
     expect(restored.recentRoots, ['/b', '/a']);
     expect(restored.sessions, hasLength(20));
@@ -91,7 +93,7 @@ void main() {
   });
 
   test('retorna defaults para arquivo inexistente', () async {
-    final state = await DesktopStateStore(file: stateFile).load();
+    final state = await DesktopStorageService(file: stateFile).load();
 
     expect(state.host, isNull);
     expect(state.model, isNull);
@@ -107,7 +109,7 @@ void main() {
   test('retorna defaults para JSON corrompido', () async {
     await stateFile.writeAsString('{nao e json');
 
-    final state = await DesktopStateStore(file: stateFile).load();
+    final state = await DesktopStorageService(file: stateFile).load();
 
     expect(state.host, isNull);
     expect(state.model, isNull);
@@ -117,7 +119,7 @@ void main() {
   test('retorna defaults para versao desconhecida', () async {
     await stateFile.writeAsString(jsonEncode({'version': 999, 'model': 'x'}));
 
-    final state = await DesktopStateStore(file: stateFile).load();
+    final state = await DesktopStorageService(file: stateFile).load();
 
     expect(state.model, isNull);
     expect(state.recentRoots, isEmpty);
@@ -128,7 +130,7 @@ void main() {
       jsonEncode({'version': 1, 'model': 'gemma2:2b'}),
     );
 
-    final state = await DesktopStateStore(file: stateFile).load();
+    final state = await DesktopStorageService(file: stateFile).load();
 
     expect(state.model, 'gemma2:2b');
     expect(state.host, isNull);
@@ -140,9 +142,9 @@ void main() {
   });
 
   test('grava arquivo valido sem deixar temporario no diretorio', () async {
-    final store = DesktopStateStore(file: stateFile);
+    final store = DesktopStorageService(file: stateFile);
 
-    await store.save(DesktopPersistedState(model: 'llama3.2:3b'));
+    await store.save(DesktopPreferencesEntity(model: 'llama3.2:3b'));
 
     expect(stateFile.existsSync(), isTrue);
     final decoded = jsonDecode(stateFile.readAsStringSync());
@@ -152,12 +154,12 @@ void main() {
   });
 
   test('substitui o arquivo anterior por completo', () async {
-    final store = DesktopStateStore(file: stateFile);
+    final store = DesktopStorageService(file: stateFile);
 
     await store.save(
-      DesktopPersistedState(model: 'primeiro', recentRoots: ['/um']),
+      DesktopPreferencesEntity(model: 'primeiro', recentRoots: ['/um']),
     );
-    await store.save(DesktopPersistedState(model: 'segundo'));
+    await store.save(DesktopPreferencesEntity(model: 'segundo'));
 
     final state = await store.load();
     expect(state.model, 'segundo');

@@ -3,7 +3,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salvador_cli/salvador_cli.dart';
 import 'package:salvador_desktop/src/desktop/desktop_controller.dart';
-import 'package:salvador_desktop/src/desktop/desktop_state_store.dart';
+import 'package:salvador_desktop/common/services/desktop_storage_service.dart';
+import 'package:salvador_desktop/domain/entities/desktop_preferences_entity.dart';
 
 void main() {
   late Directory root;
@@ -53,8 +54,8 @@ void main() {
     'inicializa restaurando preferencias persistidas sem Ollama real',
     () async {
       final stateFile = File('${root.path}/state.json');
-      await DesktopStateStore(file: stateFile).save(
-        DesktopPersistedState(
+      await DesktopStorageService(file: stateFile).save(
+        DesktopPreferencesEntity(
           host: Uri.parse('http://192.168.1.50:11434'),
           model: 'llama3.2:3b',
           inference: InferenceOptions(temperature: 0.3, contextLength: 2048),
@@ -74,7 +75,7 @@ void main() {
           <({String model, Uri baseUrl, InferenceOptions options})>[];
       final controller = DesktopController(
         initialRoot: root,
-        store: DesktopStateStore(file: stateFile),
+        store: DesktopStorageService(file: stateFile),
         clientFactory: ({required model, required baseUrl, required options}) {
           factoryCalls.add((model: model, baseUrl: baseUrl, options: options));
           return fake;
@@ -122,7 +123,7 @@ void main() {
           <({String model, Uri baseUrl, InferenceOptions options})>[];
       final controller = DesktopController(
         initialRoot: root,
-        store: DesktopStateStore(file: stateFile),
+        store: DesktopStorageService(file: stateFile),
         clientFactory: ({required model, required baseUrl, required options}) {
           factoryCalls.add((model: model, baseUrl: baseUrl, options: options));
           return fake;
@@ -137,7 +138,7 @@ void main() {
       expect(controller.modelState, ModelRunState.running);
       expect(fake.loadedModels, ['gemma2:2b']);
       expect(factoryCalls.any((call) => call.model == 'gemma2:2b'), isTrue);
-      final saved = await DesktopStateStore(file: stateFile).load();
+      final saved = await DesktopStorageService(file: stateFile).load();
       expect(saved.model, 'gemma2:2b');
       controller.dispose();
     },
@@ -152,7 +153,7 @@ void main() {
     );
     final controller = DesktopController(
       initialRoot: root,
-      store: DesktopStateStore(file: stateFile),
+      store: DesktopStorageService(file: stateFile),
       clientFactory: ({required model, required baseUrl, required options}) =>
           fake,
     );
@@ -196,7 +197,7 @@ void main() {
     expect(controller.temperature, 0.7);
     expect(controller.allowEdit, isFalse);
     expect(controller.allowCommands, isTrue);
-    final saved = await DesktopStateStore(file: stateFile).load();
+    final saved = await DesktopStorageService(file: stateFile).load();
     expect(saved.inference.temperature, 0.7);
     expect(saved.inference.contextLength, 4096);
     expect(saved.inference.keepAlive, const Duration(minutes: 15));
@@ -215,7 +216,7 @@ void main() {
       );
       final controller = DesktopController(
         initialRoot: root,
-        store: DesktopStateStore(file: stateFile),
+        store: DesktopStorageService(file: stateFile),
         clientFactory: ({required model, required baseUrl, required options}) =>
             fake,
       );
@@ -249,7 +250,7 @@ void main() {
     );
     final controller = DesktopController(
       initialRoot: root,
-      store: DesktopStateStore(file: stateFile),
+      store: DesktopStorageService(file: stateFile),
       clientFactory: ({required model, required baseUrl, required options}) =>
           fake,
     );
@@ -292,7 +293,7 @@ void main() {
       );
       final controller = DesktopController(
         initialRoot: root,
-        store: DesktopStateStore(file: stateFile),
+        store: DesktopStorageService(file: stateFile),
         clientFactory: ({required model, required baseUrl, required options}) =>
             fake,
         clock: () => DateTime(2026, 8, 28, 12),
@@ -305,7 +306,7 @@ void main() {
       await controller.selectRoot(dirA.path);
 
       expect(controller.recentRoots, [dirA.path, dirB.path]);
-      var saved = await DesktopStateStore(file: stateFile).load();
+      var saved = await DesktopStorageService(file: stateFile).load();
       expect(saved.activeRoot, dirA.path);
       expect(saved.recentRoots, [dirA.path, dirB.path]);
 
@@ -321,7 +322,7 @@ void main() {
       expect(controller.sessions.single.title, 'analise a.txt');
       expect(controller.sessions.single.actionCount, 1);
       expect(controller.sessions.single.startedAt, DateTime(2026, 8, 28, 12));
-      saved = await DesktopStateStore(file: stateFile).load();
+      saved = await DesktopStorageService(file: stateFile).load();
       expect(saved.sessions, hasLength(1));
       expect(saved.sessions.single.title, 'analise a.txt');
       controller.dispose();
@@ -524,14 +525,14 @@ DesktopController _treeController(Directory root) => DesktopController(
       FakeOllamaClient(model: model, baseUrl: baseUrl),
 );
 
-class _TreeNoIoStore extends DesktopStateStore {
+class _TreeNoIoStore extends DesktopStorageService {
   _TreeNoIoStore() : super(file: File('/tmp/salvador_tree_noop.json'));
 
   @override
-  Future<DesktopPersistedState> load() async => const DesktopPersistedState();
+  Future<DesktopPreferencesEntity> load() async => const DesktopPreferencesEntity();
 
   @override
-  Future<void> save(DesktopPersistedState state) async {}
+  Future<void> save(DesktopPreferencesEntity state) async {}
 }
 
 Future<void> buildTreeFixture(Directory root, Directory outside) async {

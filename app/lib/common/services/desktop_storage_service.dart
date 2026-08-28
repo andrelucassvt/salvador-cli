@@ -2,45 +2,14 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:salvador_cli/salvador_cli.dart';
-
-/// Estado persistido do desktop, sem conteudo de conversas.
-class DesktopPersistedState {
-  const DesktopPersistedState({
-    this.host,
-    this.model,
-    this.inference = const InferenceOptions(),
-    this.permissions = const AgentPermissions(),
-    this.activeRoot,
-    this.recentRoots = const [],
-    this.sessions = const [],
-  });
-
-  final Uri? host;
-  final String? model;
-  final InferenceOptions inference;
-  final AgentPermissions permissions;
-  final String? activeRoot;
-  final List<String> recentRoots;
-  final List<PersistedSessionSummary> sessions;
-}
-
-class PersistedSessionSummary {
-  const PersistedSessionSummary({
-    required this.title,
-    required this.startedAt,
-    required this.actionCount,
-  });
-
-  final String title;
-  final DateTime startedAt;
-  final int actionCount;
-}
+import 'package:salvador_desktop/domain/entities/desktop_preferences_entity.dart';
+import 'package:salvador_desktop/domain/entities/persisted_session_summary_entity.dart';
 
 /// Persistencia local em JSON versionado, no diretorio de dados do sistema
 /// operacional. Leitura defensiva devolve defaults e gravacao atomica evita
 /// arquivo parcialmente escrito.
-class DesktopStateStore {
-  DesktopStateStore({File? file}) : file = file ?? defaultFile();
+class DesktopStorageService {
+  DesktopStorageService({File? file}) : file = file ?? defaultFile();
 
   static const currentVersion = 1;
   static const maxRecentRoots = 8;
@@ -67,21 +36,21 @@ class DesktopStateStore {
     return File('$base/Salvador/$_stateFileName');
   }
 
-  Future<DesktopPersistedState> load() async {
-    if (!await file.exists()) return const DesktopPersistedState();
+  Future<DesktopPreferencesEntity> load() async {
+    if (!await file.exists()) return const DesktopPreferencesEntity();
     try {
       final decoded = jsonDecode(await file.readAsString());
       if (decoded is! Map || decoded['version'] != currentVersion) {
-        return const DesktopPersistedState();
+        return const DesktopPreferencesEntity();
       }
       final json = decoded.cast<String, Object?>();
       return _fromJson(json);
     } on FormatException {
-      return const DesktopPersistedState();
+      return const DesktopPreferencesEntity();
     }
   }
 
-  Future<void> save(DesktopPersistedState state) async {
+  Future<void> save(DesktopPreferencesEntity state) async {
     await file.parent.create(recursive: true);
     final temp = File('${file.path}.tmp');
     await temp.writeAsString(jsonEncode(_toJson(state)));
@@ -93,10 +62,10 @@ class DesktopStateStore {
     }
   }
 
-  DesktopPersistedState _fromJson(Map<String, Object?> json) {
+  DesktopPreferencesEntity _fromJson(Map<String, Object?> json) {
     final host = json['host'];
     final sessions = json['sessions'];
-    return DesktopPersistedState(
+    return DesktopPreferencesEntity(
       host: host is String ? Uri.tryParse(host) : null,
       model: json['model'] as String?,
       inference: InferenceOptions(
@@ -115,7 +84,7 @@ class DesktopStateStore {
           ? sessions
                 .whereType<Map>()
                 .map(
-                  (entry) => PersistedSessionSummary(
+                  (entry) => PersistedSessionSummaryEntity(
                     title: entry['title'] as String? ?? '',
                     startedAt:
                         _dateTime(entry['started_at']) ??
@@ -128,7 +97,7 @@ class DesktopStateStore {
     );
   }
 
-  Map<String, Object?> _toJson(DesktopPersistedState state) => {
+  Map<String, Object?> _toJson(DesktopPreferencesEntity state) => {
     'version': currentVersion,
     if (state.host != null) 'host': state.host.toString(),
     if (state.model != null) 'model': state.model,
@@ -164,8 +133,8 @@ class DesktopStateStore {
     return unique.sublist(0, maxRecentRoots);
   }
 
-  List<PersistedSessionSummary> _normalizeSessions(
-    List<PersistedSessionSummary> sessions,
+  List<PersistedSessionSummaryEntity> _normalizeSessions(
+    List<PersistedSessionSummaryEntity> sessions,
   ) {
     final sorted = [...sessions]
       ..sort((a, b) => b.startedAt.compareTo(a.startedAt));
