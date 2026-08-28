@@ -108,13 +108,12 @@ class Composer extends StatelessWidget {
                       height: 62,
                       child: Focus(
                         onKeyEvent: (_, event) {
-                          final metaPressed =
-                              HardwareKeyboard.instance.isMetaPressed;
-                          final controlPressed =
-                              HardwareKeyboard.instance.isControlPressed;
                           if (event is KeyDownEvent &&
                               event.logicalKey == LogicalKeyboardKey.enter &&
-                              (metaPressed || controlPressed)) {
+                              !HardwareKeyboard.instance.isShiftPressed) {
+                            if (sending || !ready) {
+                              return KeyEventResult.handled;
+                            }
                             onSend();
                             return KeyEventResult.handled;
                           }
@@ -159,7 +158,7 @@ class Composer extends StatelessWidget {
                           label: const Text('Arquivo'),
                         ),
                         const Text(
-                          '⌘/Ctrl+Enter para enviar · Enter para quebrar linha',
+                          'Enter para enviar · Shift+Enter para quebrar linha',
                           style: TextStyle(color: muted, fontSize: 10),
                         ),
                         FilledButton(

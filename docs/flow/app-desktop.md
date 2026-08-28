@@ -1,7 +1,7 @@
 ---
 generated_at: 2026-08-28
-source_commit: a905f85
-source_state: clean
+source_commit: ae9aaaa
+source_state: dirty
 verified_at: 2026-08-28
 status: current
 related_plans: ['docs/plan/salvador-desktop-clean-architecture/00-indice.md']
@@ -20,7 +20,7 @@ O desktop segue Clean Architecture (Presentation → Domain ← Data) com injeç
 - **`FileExplorerCubit`** — árvore de arquivos, filtro, preview e sugestões de menção `@arquivo`.
 - **`SettingsCubit`** — estado local do formulário do diálogo de configurações (criado sob demanda, via `registerFactoryParam`, com os valores atuais do `WorkspaceState`).
 
-Nenhum Cubit referencia outro diretamente: a sincronização entre eles acontece na View (`_ShellScreenState`, em `salvador_desktop_app.dart`), via `MultiBlocListener` — quando `WorkspaceCubit` emite uma nova raiz/modelo/permissões, a View aciona `FileExplorerCubit.setRoot(...)` e `ChatCubit.attachSession(...)`; quando `ChatCubit.newSession()` encerra uma sessão, ela recebe um callback (não uma referência a Cubit) que a View liga a `WorkspaceCubit.recordSession(...)`.
+Nenhum Cubit referencia outro diretamente: a sincronização entre eles acontece na View (`_ShellScreenState`, em `desktop_view.dart`), via `MultiBlocListener` — quando `WorkspaceCubit` emite uma nova raiz/modelo/permissões, a View aciona `FileExplorerCubit.setRoot(...)` e `ChatCubit.attachSession(...)`; quando `ChatCubit.newSession()` encerra uma sessão, ela recebe um callback (não uma referência a Cubit) que a View liga a `WorkspaceCubit.recordSession(...)`.
 
 Na inicialização, `main.dart` chama `AppInjector.setupDependencies()` antes de `runApp`. O `WorkspaceCubit` restaura preferências, pasta, modelo, parâmetros de inferência, permissões, pastas recentes e resumos de sessões de um JSON versionado gravado no diretório de dados do SO (`Application Support` no macOS, `APPDATA` no Windows, `XDG_CONFIG_HOME`/`.config` no Linux). Em seguida, conecta ao servidor por HTTP — sem usar o binário `ollama` — consultando `/api/tags` e `/api/ps` para separar "servidor conectado" de "modelo carregado".
 
@@ -29,10 +29,10 @@ O shell tem quatro regiões: title bar customizada de 38 px no macOS, top bar de
 ## Passo a Passo
 
 1. **Bootstrap** — `app/lib/main.dart` → `main`
-   `WidgetsFlutterBinding.ensureInitialized()`; `await AppInjector.setupDependencies()` registra services → datasources → repositories → cubits no GetIt. No macOS, inicializa o `window_manager` com `TitleBarStyle.hidden` (a janela fica sem title bar nativa e o app desenha a própria de 38 px). `runApp(const SalvadorDesktopApp())`.
+   `WidgetsFlutterBinding.ensureInitialized()`; `await AppInjector.setupDependencies()` registra services → datasources → repositories → cubits no GetIt. No macOS, inicializa o `window_manager` com `TitleBarStyle.hidden` (a janela fica sem title bar nativa e o app desenha a própria de 38 px). `runApp(const DesktopView())`.
 
-2. **Montagem do shell** — `app/lib/src/desktop/salvador_desktop_app.dart` → `SalvadorDesktopApp` / `_ShellScreenState.initState`
-   Resolve `WorkspaceCubit`, `ChatCubit` e `FileExplorerCubit` via `AppInjector.inject<...>()`, registra os `MultiBlocListener`s de sincronização entre eles e agenda `_workspaceCubit.initialize()` no primeiro frame.
+2. **Montagem do shell** — `app/lib/presentation/desktop/view/desktop_view.dart` → `DesktopView` / `_ShellScreenState.initState`
+   `DesktopView` (StatelessWidget) monta o `MaterialApp` com o tema derivado dos tokens de `presentation/desktop/theme/desktop_theme.dart` e o shell privado `_ShellScreen`. `_ShellScreenState.initState` resolve `WorkspaceCubit`, `ChatCubit` e `FileExplorerCubit` via `AppInjector.inject<...>()`, registra os `MultiBlocListener`s de sincronização entre eles e agenda `_workspaceCubit.initialize()` no primeiro frame.
 
 3. **Restauração do estado** — `app/lib/presentation/desktop/view_model/workspace_cubit.dart` → `WorkspaceCubit.initialize`
    Lê `DesktopStorageService.load()` (JSON versionado, leitura defensiva devolve defaults em arquivo ausente/corrompido/versão desconhecida) e aplica host, modelo, `InferenceOptions`, `AgentPermissions`, raiz ativa, recentes e sessões; valida a raiz no disco e chama `_connect()`.
@@ -40,7 +40,7 @@ O shell tem quatro regiões: title bar customizada de 38 px no macOS, top bar de
 4. **Conexão com o Ollama** — `workspace_cubit.dart` → `_connect`
    Chama `OllamaRepository.testConnection`/`listModels`/`listRunningModels` (implementados em `data/repositories/ollama_repository_impl.dart`, que encapsula `OllamaClient` via `data/datasources/ollama_remote_datasource.dart`); sem modelos instalados, emite `WorkspaceErrorKind.noModelsInstalled`. Seleciona o primeiro modelo se o persistido não existir e deriva `modelState` (parado/carregado) dos modelos em `/api/ps`.
 
-5. **Sincronização entre Cubits** — `salvador_desktop_app.dart` → `_ShellScreenState.build` (`MultiBlocListener`)
+5. **Sincronização entre Cubits** — `desktop_view.dart` → `_ShellScreenState.build` (`MultiBlocListener`)
    Ao `WorkspaceState` mudar de raiz/host/modelo/permissões (ou terminar uma reconexão), a View chama `FileExplorerCubit.setRoot(root)` e `ChatCubit.attachSession(host:, model:, options:, root:, permissions:)`. Ao `modelState`/`connecting` mudarem, chama `ChatCubit.updateReadiness(...)`, que substitui a checagem `connectionState == ready && modelState == running` do controlador antigo.
 
 6. **Interações da top bar** — `presentation/desktop/content/workspace_top_bar.dart` + `presentation/desktop/widgets/folder_menu.dart` / `model_menu.dart` / `start_stop_button.dart`
@@ -85,7 +85,8 @@ O shell tem quatro regiões: title bar customizada de 38 px no macOS, top bar de
 | Estado | `app/lib/presentation/desktop/view_model/chat_{cubit,state}.dart` | Mensagens, atividades, envio, sessão em andamento |
 | Estado | `app/lib/presentation/desktop/view_model/file_explorer_{cubit,state}.dart` | Árvore, filtro, preview, menções |
 | Estado | `app/lib/presentation/desktop/view_model/settings_{cubit,state}.dart` | Formulário do diálogo de configurações |
-| Apresentação | `app/lib/src/desktop/salvador_desktop_app.dart` | Shell: tema, `_ShellScreenState` (resolve Cubits, `MultiBlocListener`, composer, scroll) |
+| Apresentação | `app/lib/presentation/desktop/view/desktop_view.dart` | `DesktopView` (MaterialApp + tema) e shell `_ShellScreenState` (resolve Cubits, `MultiBlocListener`, composer, scroll, `/exit` e `/quit`) |
+| Apresentação | `app/lib/presentation/desktop/theme/desktop_theme.dart` | Paleta (navy/ocean/coral/shell/paper/…) e dimensões do shell (title bar, top bar, rails, painéis) |
 | Apresentação | `app/lib/presentation/desktop/content/{workspace_top_bar,settings_dialog,composer}.dart` | Blocos únicos da View (top bar, diálogo de configurações, composer) |
 | Apresentação | `app/lib/presentation/desktop/widgets/*.dart` | Componentes reutilizados (menus, botões, painel/rail de atividade, painel/rail de arquivos, preview, cartões de chat, highlighter) |
 | Utilitários | `app/lib/common/utils/formatters.dart` | `formatBytes`/`relativeTime`/`formatSessionDate` |

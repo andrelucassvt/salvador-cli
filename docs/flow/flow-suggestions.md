@@ -1,7 +1,7 @@
 ---
 generated_at: 2026-08-28
-source_commit: feb38f7
-source_state: clean
+source_commit: ae9aaaa
+source_state: dirty
 verified_at: 2026-08-28
 status: current
 related_plans: []
@@ -27,7 +27,7 @@ related_plans: []
 
 ### Descoberta do Ollama
 **Arquivo a criar:** `docs/flow/descoberta-do-ollama.md`
-**Resumo:** Verificação do binário via `ollama --help`, listagem de modelos com `ollama list`, parsing da saída em `parseModelList` e as duas estratégias de execução do processo — direta na CLI e por caminhos absolutos no app desktop.
+**Resumo:** Verificação do binário via `ollama --help`, listagem de modelos com `ollama list` e parsing da saída em `parseModelList` — usado apenas pela CLI; o app desktop resolve por HTTP.
 
 ---
 
@@ -55,12 +55,7 @@ related_plans: []
 
 ---
 
-### App desktop
-**Arquivo a criar:** `docs/flow/app-desktop.md`
-**Resumo:** Ciclo do `DesktopController`: `initialize` → `refreshConnection` (validação de host e raiz, descoberta de modelos, reconstrução da sessão), envio de mensagens, registro de `ToolActivity` e como o `SalvadorDesktopApp` reage às notificações do `ChangeNotifier`.
-
----
-
 ## Já documentados
 
 - `docs/flow/project-structure.md` — Estrutura geral do projeto
+- `docs/flow/app-desktop.md` — App desktop: bootstrap do `AppInjector`, `WorkspaceCubit`/`ChatCubit`/`FileExplorerCubit`/`SettingsCubit`, conexão HTTP com o Ollama, configurações, atividade/sessões e árvore/preview no `DesktopView`
