@@ -624,12 +624,11 @@ class _Composer extends StatelessWidget {
                   children: [
                     Focus(
                       onKeyEvent: (_, event) {
-                        final modifier =
-                            HardwareKeyboard.instance.isMetaPressed ||
-                            HardwareKeyboard.instance.isControlPressed;
+                        final shiftPressed =
+                            HardwareKeyboard.instance.isShiftPressed;
                         if (event is KeyDownEvent &&
                             event.logicalKey == LogicalKeyboardKey.enter &&
-                            modifier) {
+                            !shiftPressed) {
                           onSend();
                           return KeyEventResult.handled;
                         }
@@ -668,7 +667,7 @@ class _Composer extends StatelessWidget {
                         const SizedBox(width: 8),
                         const Expanded(
                           child: Text(
-                            '⌘/Ctrl + Enter para enviar',
+                            'Enter para enviar · Shift+Enter para quebrar linha',
                             textAlign: TextAlign.right,
                             style: TextStyle(color: _muted, fontSize: 10),
                           ),
