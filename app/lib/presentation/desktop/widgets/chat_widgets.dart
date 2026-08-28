@@ -69,7 +69,8 @@ class EmptyState extends StatelessWidget {
                   children: [
                     _PromptCard(
                       label: 'Entender o projeto',
-                      prompt: 'Analise este projeto e explique sua arquitetura.',
+                      prompt:
+                          'Analise este projeto e explique sua arquitetura.',
                       icon: Icons.account_tree_outlined,
                       onTap: onPrompt,
                     ),
@@ -177,27 +178,49 @@ class _MetricsBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final rate = metrics.tokensPerSecond;
     final items = [
-      '${rate == null ? 'n/d' : rate.toStringAsFixed(1)} tok/s',
-      '${metrics.generatedTokens} saída',
-      '${metrics.promptTokens} entrada',
-      '${metrics.totalSeconds.toStringAsFixed(2)}s total',
-      if (metrics.generations > 1) '${metrics.generations} gerações',
+      (
+        Icons.speed_rounded,
+        rate == null ? 'n/d' : '${rate.toStringAsFixed(1)} tok/s',
+      ),
+      (Icons.north_east_rounded, '${metrics.generatedTokens} saída'),
+      (Icons.south_west_rounded, '${metrics.promptTokens} entrada'),
+      (
+        Icons.timer_outlined,
+        '${metrics.totalSeconds.toStringAsFixed(2)}s total',
+      ),
+      if (metrics.generations > 1)
+        (Icons.repeat_rounded, '${metrics.generations} gerações'),
     ];
-    return Wrap(
-      spacing: 10,
-      runSpacing: 5,
-      children: items
-          .map(
-            (item) => Text(
-              item,
-              style: const TextStyle(
-                color: muted,
-                fontSize: 10,
-                fontFamily: 'JetBrains Mono',
+    return Container(
+      padding: const EdgeInsets.only(top: 12),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: line)),
+      ),
+      child: Wrap(
+        spacing: 14,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: items
+            .map(
+              (item) => Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(item.$1, size: 12, color: ocean),
+                  const SizedBox(width: 4),
+                  Text(
+                    item.$2,
+                    style: const TextStyle(
+                      color: muted,
+                      fontSize: 10.5,
+                      fontFamily: 'JetBrains Mono',
+                      letterSpacing: .1,
+                    ),
+                  ),
+                ],
               ),
-            ),
-          )
-          .toList(growable: false),
+            )
+            .toList(growable: false),
+      ),
     );
   }
 }
@@ -243,7 +266,10 @@ class ErrorBanner extends StatelessWidget {
           const Icon(Icons.error_outline_rounded, color: coral, size: 18),
           const SizedBox(width: 9),
           Expanded(
-            child: Text(message, style: const TextStyle(color: ink, fontSize: 12)),
+            child: Text(
+              message,
+              style: const TextStyle(color: ink, fontSize: 12),
+            ),
           ),
         ],
       ),
