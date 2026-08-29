@@ -34,166 +34,191 @@ class Composer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(24, 10, 24, 20),
-      color: shell,
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 920),
-          child: Column(
-            children: [
-              if (suggestions.isNotEmpty)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 7),
-                  decoration: BoxDecoration(
-                    color: paper,
-                    border: Border.all(color: line),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x14082C40),
-                        blurRadius: 18,
-                        offset: Offset(0, 7),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = constraints.maxWidth < 420;
+        return Container(
+          padding: narrow
+              ? const EdgeInsets.fromLTRB(16, 10, 16, 20)
+              : const EdgeInsets.fromLTRB(24, 10, 24, 20),
+          color: shell,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 920),
+              child: Column(
+                children: [
+                  if (suggestions.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 7),
+                      decoration: BoxDecoration(
+                        color: paper,
+                        border: Border.all(color: line),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x14082C40),
+                            blurRadius: 18,
+                            offset: Offset(0, 7),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  child: Column(
-                    children: suggestions
-                        .map(
-                          (path) => InkWell(
-                            onTap: () => onSuggestion(path),
-                            borderRadius: BorderRadius.circular(10),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 9,
+                      child: Column(
+                        children: suggestions
+                            .map(
+                              (path) => InkWell(
+                                onTap: () => onSuggestion(path),
+                                borderRadius: BorderRadius.circular(10),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 9,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.description_outlined,
+                                        color: ocean,
+                                        size: 17,
+                                      ),
+                                      const SizedBox(width: 9),
+                                      Expanded(
+                                        child: Text(
+                                          path,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: ink,
+                                            fontSize: 12,
+                                            fontFamily: 'JetBrains Mono',
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.description_outlined,
-                                    color: ocean,
+                            )
+                            .toList(growable: false),
+                      ),
+                    ),
+                  if (pendingAttachments.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 7),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: pendingAttachments
+                            .map(
+                              (attachment) => FileChip(
+                                label: attachment.name,
+                                showAtPrefix: false,
+                                onRemove: () =>
+                                    onRemoveAttachment(attachment.path),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                    ),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+                    decoration: BoxDecoration(
+                      color: paper,
+                      border: Border.all(color: ready ? line : coral),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x12082C40),
+                          blurRadius: 22,
+                          offset: Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Focus(
+                          onKeyEvent: (_, event) {
+                            if (event is KeyDownEvent &&
+                                event.logicalKey == LogicalKeyboardKey.enter &&
+                                !HardwareKeyboard.instance.isShiftPressed) {
+                              if (sending || !ready) {
+                                return KeyEventResult.handled;
+                              }
+                              onSend();
+                              return KeyEventResult.handled;
+                            }
+                            return KeyEventResult.ignored;
+                          },
+                          child: TextField(
+                            key: const Key('composer-field'),
+                            controller: controller,
+                            focusNode: focusNode,
+                            minLines: 1,
+                            maxLines: 10,
+                            textAlignVertical: TextAlignVertical.center,
+                            enabled: !sending,
+                            style: const TextStyle(color: ink, fontSize: 14),
+                            decoration: InputDecoration(
+                              hintText: ready
+                                  ? 'Peça uma alteração ou mencione um arquivo com @…'
+                                  : 'Conecte ao Ollama e inicie o modelo para começar…',
+                              hintStyle: const TextStyle(color: muted),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          spacing: 12,
+                          children: [
+                            Row(
+                              spacing: 4,
+                              children: [
+                                TextButton.icon(
+                                  onPressed: sending ? null : onMention,
+                                  icon: const Icon(
+                                    Icons.alternate_email_rounded,
                                     size: 17,
                                   ),
-                                  const SizedBox(width: 9),
-                                  Expanded(
-                                    child: Text(
-                                      path,
+                                  label: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 52,
+                                    ),
+                                    child: const Text(
+                                      'Arquivo',
+                                      maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: ink,
-                                        fontSize: 12,
-                                        fontFamily: 'JetBrains Mono',
-                                      ),
                                     ),
                                   ),
-                                ],
-                              ),
+                                ),
+                                TextButton.icon(
+                                  onPressed: sending ? null : onAttach,
+                                  icon: const Icon(
+                                    Icons.attach_file_rounded,
+                                    size: 17,
+                                  ),
+                                  label: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 52,
+                                    ),
+                                    child: const Text(
+                                      'Anexar',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        )
-                        .toList(growable: false),
-                  ),
-                ),
-              if (pendingAttachments.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 7),
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: pendingAttachments
-                        .map(
-                          (attachment) => FileChip(
-                            label: attachment.name,
-                            showAtPrefix: false,
-                            onRemove: () => onRemoveAttachment(attachment.path),
-                          ),
-                        )
-                        .toList(growable: false),
-                  ),
-                ),
-              Container(
-                padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-                decoration: BoxDecoration(
-                  color: paper,
-                  border: Border.all(color: ready ? line : coral),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x12082C40),
-                      blurRadius: 22,
-                      offset: Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Focus(
-                      onKeyEvent: (_, event) {
-                        if (event is KeyDownEvent &&
-                            event.logicalKey == LogicalKeyboardKey.enter &&
-                            !HardwareKeyboard.instance.isShiftPressed) {
-                          if (sending || !ready) {
-                            return KeyEventResult.handled;
-                          }
-                          onSend();
-                          return KeyEventResult.handled;
-                        }
-                        return KeyEventResult.ignored;
-                      },
-                      child: TextField(
-                        key: const Key('composer-field'),
-                        controller: controller,
-                        focusNode: focusNode,
-                        minLines: 1,
-                        maxLines: 10,
-                        textAlignVertical: TextAlignVertical.center,
-                        enabled: !sending,
-                        style: const TextStyle(color: ink, fontSize: 14),
-                        decoration: InputDecoration(
-                          hintText: ready
-                              ? 'Peça uma alteração ou mencione um arquivo com @…'
-                              : 'Conecte ao Ollama e inicie o modelo para começar…',
-                          hintStyle: const TextStyle(color: muted),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      // alignment: WrapAlignment.spaceBetween,
-                      // crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 12,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      //runSpacing: 8,
-                      children: [
-                        Row(
-                          spacing: 4,
-                          children: [
-                            TextButton.icon(
-                              onPressed: sending ? null : onMention,
-                              icon: const Icon(
-                                Icons.alternate_email_rounded,
-                                size: 17,
+                            const Spacer(),
+                            Flexible(
+                              child: Text(
+                                'Enter para enviar · Shift+Enter para quebrar linha',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: muted,
+                                  fontSize: 10,
+                                ),
                               ),
-                              label: const Text('Arquivo'),
-                            ),
-                            TextButton.icon(
-                              onPressed: sending ? null : onAttach,
-                              icon: const Icon(
-                                Icons.attach_file_rounded,
-                                size: 17,
-                              ),
-                              label: const Text('Anexar'),
-                            ),
-                          ],
-                        ),
-                        Row(
-                          spacing: 10,
-                          children: [
-                            const Text(
-                              'Enter para enviar · Shift+Enter para quebrar linha',
-                              style: TextStyle(color: muted, fontSize: 10),
                             ),
                             FilledButton(
                               key: const Key('send-button'),
@@ -220,13 +245,13 @@ class Composer extends StatelessWidget {
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

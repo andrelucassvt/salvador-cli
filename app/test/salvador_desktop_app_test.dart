@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:salvador_cli/salvador_cli.dart';
 import 'package:salvador_desktop/common/services/desktop_storage_service.dart';
 import 'package:salvador_desktop/common/services/system_memory_service.dart';
+import 'package:salvador_desktop/config/error/app_exception.dart';
+import 'package:salvador_desktop/config/error/result_pattern.dart';
 import 'package:salvador_desktop/config/inject/app_injector.dart';
 import 'package:salvador_desktop/data/datasources/chat_agent_datasource.dart';
 import 'package:salvador_desktop/data/datasources/ollama_remote_datasource.dart';
@@ -19,11 +21,15 @@ import 'package:salvador_desktop/domain/interfaces/ollama_repository.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/chat_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/chat_state.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/file_explorer_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/git_cubit.dart';
+
 import 'package:salvador_desktop/presentation/desktop/view_model/settings_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/settings_state.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/workspace_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/workspace_state.dart';
 import 'package:salvador_desktop/presentation/desktop/view/desktop_view.dart';
+
+import 'presentation/desktop/fakes/fake_git_repository.dart';
 
 /// Suíte de integração: registra Cubits reais no AppInjector, faking só a
 /// borda de rede (OllamaClient) e a borda de disco (DesktopStorageService),
@@ -92,11 +98,14 @@ void main() {
       clock: () => DateTime(2026, 8, 28, 12),
     );
     final fileExplorerCubit = FileExplorerCubit(workspaceRepository);
+    final gitRepository = FakeGitRepository();
+    final gitCubit = GitCubit(gitRepository);
 
     AppInjector.inject
       ..registerFactory<WorkspaceCubit>(() => workspaceCubit)
       ..registerFactory<ChatCubit>(() => chatCubit)
       ..registerFactory<FileExplorerCubit>(() => fileExplorerCubit)
+      ..registerFactory<GitCubit>(() => gitCubit)
       ..registerFactoryParam<SettingsCubit, SettingsEditing, void>(
         (initial, _) => SettingsCubit(ollamaRepository, initial: initial),
       );
@@ -108,6 +117,8 @@ void main() {
       workspaceCubit: workspaceCubit,
       chatCubit: chatCubit,
       fileExplorerCubit: fileExplorerCubit,
+      gitRepository: gitRepository,
+      gitCubit: gitCubit,
     );
   }
 
@@ -168,7 +179,10 @@ void main() {
       () => Directory('${harness.root.path}/outro-projeto').create(),
     );
     harness.storage.seed(
-      DesktopPreferencesEntity(recentRoots: [harness.root.path, other!.path]),
+      DesktopPreferencesEntity(
+        activeRoot: harness.root.path,
+        recentRoots: [harness.root.path, other!.path],
+      ),
     );
     await pumpShell(tester);
 
@@ -315,10 +329,10 @@ void main() {
     );
     await pumpShell(tester);
 
-    expect(find.byKey(const Key('activity-rail')), findsOneWidget);
+    expect(find.byKey(const Key('workspace-rail')), findsOneWidget);
     expect(find.byKey(const Key('activity-panel')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('expand-panel-button')));
+    await tester.tap(find.byKey(const Key('rail-sessions-button')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('activity-panel')), findsOneWidget);
     expect(
@@ -347,7 +361,7 @@ void main() {
     await tester.tap(find.byKey(const Key('collapse-panel-button')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('activity-panel')), findsNothing);
-    expect(find.byKey(const Key('activity-rail')), findsOneWidget);
+    expect(find.byKey(const Key('workspace-rail')), findsOneWidget);
   });
 
   testWidgets('sessao atual aparece no painel durante a conversa', (
@@ -365,7 +379,7 @@ void main() {
       WorkspaceModelState.running,
     );
 
-    await tester.tap(find.byKey(const Key('expand-panel-button')));
+    await tester.tap(find.byKey(const Key('rail-sessions-button')));
     await tester.pumpAndSettle();
 
     await tester.enterText(
@@ -412,7 +426,11 @@ void main() {
   testWidgets('arvore expande, filtra e abre preview com mencao', (
     tester,
   ) async {
-    final harness = await buildHarness(tester);
+    final harness = await buildHarness(
+      tester,
+      initialPreferences: (root) =>
+          DesktopPreferencesEntity(activeRoot: root.path),
+    );
     await tester.runAsync(() async {
       await Directory('${harness.root.path}/src').create();
       await File(
@@ -424,7 +442,7 @@ void main() {
     await pumpShell(tester);
 
     expect(find.byKey(const Key('files-rail')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('expand-files-panel-button')));
+    await tester.tap(find.byKey(const Key('right-rail-files-button')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('files-panel')), findsOneWidget);
     expect(find.byKey(const Key('tree-entry-src')), findsOneWidget);
@@ -444,7 +462,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('collapse-files-panel-button')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('expand-files-panel-button')));
+    await tester.tap(find.byKey(const Key('right-rail-files-button')));
     await tester.pumpAndSettle();
     expect(
       find.byKey(const Key('tree-entry-README.md')),
@@ -489,7 +507,7 @@ void main() {
     await buildHarness(tester);
     await pumpShell(tester);
 
-    expect(find.byKey(const Key('activity-rail')), findsOneWidget);
+    expect(find.byKey(const Key('workspace-rail')), findsOneWidget);
     expect(find.byKey(const Key('files-rail')), findsOneWidget);
     expect(find.byKey(const Key('composer-field')), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -504,9 +522,9 @@ void main() {
       await buildHarness(tester);
       await pumpShell(tester);
 
-      await tester.tap(find.byKey(const Key('expand-panel-button')));
+      await tester.tap(find.byKey(const Key('rail-sessions-button')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('expand-files-panel-button')));
+      await tester.tap(find.byKey(const Key('right-rail-files-button')));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('activity-panel')), findsOneWidget);
@@ -515,6 +533,194 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('rail alterna para Git e volta ao Chat preservando estado', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1100, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    final harness = await buildHarness(tester);
+    await pumpShell(tester);
+
+    expect(find.byKey(const Key('chat-navigation-button')), findsOneWidget);
+    expect(find.byKey(const Key('git-navigation-button')), findsOneWidget);
+    expect(find.byKey(const Key('git-workspace')), findsNothing);
+    expect(find.byKey(const Key('composer-field')), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('composer-field')),
+      'mensagem antes do git',
+    );
+    await tester.tap(find.byKey(const Key('send-button')));
+    await tester.pumpAndSettle();
+    expect((harness.chatCubit.state as ChatIdle).messages, hasLength(2));
+
+    await tester.tap(find.byKey(const Key('rail-sessions-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('activity-panel')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('git-navigation-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('git-workspace')), findsOneWidget);
+    expect(find.byKey(const Key('composer-field')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('chat-navigation-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('git-workspace')), findsNothing);
+    expect(find.byKey(const Key('composer-field')), findsOneWidget);
+    expect((harness.chatCubit.state as ChatIdle).messages, hasLength(2));
+    // A mensagem aparece na lista e como titulo da sessao no painel.
+    expect(find.text('mensagem antes do git'), findsNWidgets(2));
+    expect(
+      find.byKey(const Key('activity-panel')),
+      findsOneWidget,
+      reason: 'painel lateral deve continuar expandido ao voltar ao Chat',
+    );
+  });
+
+  testWidgets('modo Git sem projeto mostra estado vazio', (tester) async {
+    tester.view.physicalSize = const Size(1100, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    final harness = await buildHarness(tester);
+    await pumpShell(tester);
+    expect((harness.workspaceCubit.state as WorkspaceReady).root, isNull);
+
+    await tester.tap(find.byKey(const Key('git-navigation-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('git-workspace')), findsOneWidget);
+    expect(
+      find.text('Selecione um projeto para ver o status Git.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('modo Git mostra pasta sem repositorio e fora da raiz', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1100, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    final harness = await buildHarness(
+      tester,
+      initialPreferences: (root) =>
+          DesktopPreferencesEntity(activeRoot: root.path),
+    );
+    harness.gitRepository.nextResult = Result.ok(
+      const GitSnapshot(
+        repository: GitRepositoryState(kind: GitRepositoryKind.notRepository),
+      ),
+    );
+    await pumpShell(tester);
+
+    await tester.tap(find.byKey(const Key('git-navigation-button')));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Esta pasta não é um repositório Git.'),
+      findsOneWidget,
+    );
+
+    harness.gitRepository.nextResult = const Result.ok(
+      GitSnapshot(
+        repository: GitRepositoryState(
+          kind: GitRepositoryKind.repositoryOutsideRoot,
+          topLevel: '/outro/repositorio',
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('git-refresh-button')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('/outro/repositorio'), findsOneWidget);
+  });
+
+  testWidgets('modo Git mostra carregando e depois o snapshot valido', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1100, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    final harness = await buildHarness(
+      tester,
+      initialPreferences: (root) =>
+          DesktopPreferencesEntity(activeRoot: root.path),
+    );
+    await pumpShell(tester);
+
+    await tester.tap(find.byKey(const Key('git-navigation-button')));
+    // O spinner de carregamento anima indefinidamente: pump manual em vez de
+    // pumpAndSettle, que travaria esperando o fim da animacao.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(find.text('Carregando repositório...'), findsOneWidget);
+
+    harness.gitRepository.completeFirst(
+      Result.ok(
+        GitSnapshot(
+          repository: GitRepositoryState(
+            kind: GitRepositoryKind.valid,
+            topLevel: harness.root.path,
+            branch: 'main',
+            headOid: '6b8dc2efa9f5ff3a00f6262229969f841cefa6fc',
+            isDetachedHead: false,
+          ),
+          upstream: 'origin/main',
+          ahead: 3,
+          behind: 1,
+          localBranches: const [
+            GitRef(name: 'refs/heads/main', hash: 'h'),
+            GitRef(name: 'refs/heads/feature', hash: 'h'),
+          ],
+          tags: const [GitRef(name: 'refs/tags/v1.0.0', hash: 'h')],
+          commits: [
+            GitCommit(
+              hash: 'a',
+              shortHash: 'a',
+              subject: 's',
+              authorName: 't',
+              authorEmail: 't@t.co',
+              authorDate: DateTime(2026, 8, 29),
+            ),
+          ],          worktree: const [
+            GitWorktreeEntry(
+              path: 'a.txt',
+              status: GitWorktreeStatus.unstaged,
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('main'), findsOneWidget);
+    // ahead=3 e unico; behind=1 e repetido nas contagens dos chips.
+    expect(find.text('3'), findsOneWidget);
+    expect(find.textContaining('sujo'), findsOneWidget);
+    expect(find.byKey(const Key('git-refresh-button')), findsOneWidget);
+  });
+
+  testWidgets('modo Git mostra erro apresentavel do repositorio', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1100, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    final harness = await buildHarness(
+      tester,
+      initialPreferences: (root) =>
+          DesktopPreferencesEntity(activeRoot: root.path),
+    );
+    harness.gitRepository.nextResult = const Result.error(
+      GitFailureException('repositorio corrompido'),
+    );
+    await pumpShell(tester);
+
+    await tester.tap(find.byKey(const Key('git-navigation-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('repositorio corrompido'), findsOneWidget);
+  });
 }
 
 Future<void> tapPreview(WidgetTester tester, Finder finder) async {
@@ -533,6 +739,8 @@ class _Harness {
     required this.workspaceCubit,
     required this.chatCubit,
     required this.fileExplorerCubit,
+    required this.gitRepository,
+    required this.gitCubit,
   });
 
   final Directory root;
@@ -541,6 +749,8 @@ class _Harness {
   final WorkspaceCubit workspaceCubit;
   final ChatCubit chatCubit;
   final FileExplorerCubit fileExplorerCubit;
+  final FakeGitRepository gitRepository;
+  final GitCubit gitCubit;
 }
 
 class _NoIoStore extends DesktopStorageService {

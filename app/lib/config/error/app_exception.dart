@@ -36,6 +36,11 @@ class FileSystemFailureException extends AppException {
   });
 }
 
+/// Falha do cliente Git (processo, parsing ou repositório inválido).
+class GitFailureException extends AppException {
+  const GitFailureException(super.message, {super.cause, super.stackTrace});
+}
+
 /// Entrada do usuario invalida antes de qualquer chamada externa (ex.: host
 /// mal formado).
 class InvalidInputException extends AppException {

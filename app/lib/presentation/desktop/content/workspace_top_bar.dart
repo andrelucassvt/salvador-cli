@@ -110,24 +110,29 @@ class WorkspaceTopBar extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Row(
-                    children: [
-                      if (!compact) ...[
-                        const _LogoMark(),
-                        const SizedBox(width: 10),
+                  Flexible(
+                    flex: 0,
+                    fit: FlexFit.loose,
+                    child: Row(
+                      children: [
+                        if (!compact) ...[
+                          const _LogoMark(),
+                          const SizedBox(width: 10),
+                        ],
+                        FolderMenu(
+                          state: workspaceState,
+                          cubit: workspaceCubit,
+                          maxWidth: veryCompact ? 140 : 240,
+                        ),
                       ],
-                      FolderMenu(state: workspaceState, cubit: workspaceCubit),
-                    ],
+                    ),
                   ),
                   Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        // color: Colors.red.withValues(alpha: .4),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.center,
                       child: Row(
                         spacing: 10,
-                        mainAxisAlignment: MainAxisAlignment.center,
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Container(
@@ -150,7 +155,6 @@ class WorkspaceTopBar extends StatelessWidget {
                       ),
                     ),
                   ),
-
                   BlocBuilder<ChatCubit, ChatState>(
                     builder: (context, chatState) {
                       final chatCubit = context.read<ChatCubit>();

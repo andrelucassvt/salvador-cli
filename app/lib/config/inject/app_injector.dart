@@ -3,16 +3,20 @@ import 'package:salvador_desktop/common/services/desktop_storage_service.dart';
 import 'package:salvador_desktop/common/services/file_attachment_service.dart';
 import 'package:salvador_desktop/common/services/system_memory_service.dart';
 import 'package:salvador_desktop/data/datasources/chat_agent_datasource.dart';
+import 'package:salvador_desktop/data/datasources/git_datasource.dart';
 import 'package:salvador_desktop/data/datasources/ollama_remote_datasource.dart';
 import 'package:salvador_desktop/data/datasources/workspace_datasource.dart';
 import 'package:salvador_desktop/data/repositories/chat_repository_impl.dart';
+import 'package:salvador_desktop/data/repositories/git_repository_impl.dart';
 import 'package:salvador_desktop/data/repositories/ollama_repository_impl.dart';
 import 'package:salvador_desktop/data/repositories/workspace_repository_impl.dart';
 import 'package:salvador_desktop/domain/interfaces/chat_repository.dart';
+import 'package:salvador_desktop/domain/interfaces/git_repository.dart';
 import 'package:salvador_desktop/domain/interfaces/ollama_repository.dart';
 import 'package:salvador_desktop/domain/interfaces/workspace_repository.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/chat_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/file_explorer_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/git_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/settings_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/settings_state.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/workspace_cubit.dart';
@@ -44,6 +48,9 @@ class AppInjector {
     inject.registerLazySingleton<WorkspaceDataSource>(
       () => WorkspaceDataSource(),
     );
+    inject.registerLazySingleton<GitDataSource>(
+      () => GitDataSource(),
+    );
 
     // Repositories
     inject.registerLazySingleton<OllamaRepository>(
@@ -54,6 +61,9 @@ class AppInjector {
     );
     inject.registerLazySingleton<WorkspaceRepository>(
       () => WorkspaceRepositoryImpl(inject<WorkspaceDataSource>()),
+    );
+    inject.registerLazySingleton<GitRepository>(
+      () => GitRepositoryImpl(inject<GitDataSource>()),
     );
 
     // Cubits (sempre Factory)
@@ -72,6 +82,9 @@ class AppInjector {
     );
     inject.registerFactory<FileExplorerCubit>(
       () => FileExplorerCubit(inject<WorkspaceRepository>()),
+    );
+    inject.registerFactory<GitCubit>(
+      () => GitCubit(inject<GitRepository>()),
     );
     // Recebe o estado inicial do formulario como parametro: depende dos
     // valores atuais do WorkspaceState no momento em que o dialogo abre,

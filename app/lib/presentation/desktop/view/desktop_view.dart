@@ -1,10 +1,12 @@
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:salvador_desktop/config/error/app_exception.dart';
 import 'package:salvador_desktop/config/inject/app_injector.dart';
 import 'package:salvador_desktop/presentation/desktop/content/composer.dart';
+import 'package:salvador_desktop/presentation/desktop/content/git_workspace.dart';
 import 'package:salvador_desktop/presentation/desktop/content/settings_dialog.dart';
 import 'package:salvador_desktop/presentation/desktop/content/workspace_top_bar.dart';
 import 'package:salvador_desktop/presentation/desktop/theme/desktop_theme.dart';
@@ -12,12 +14,14 @@ import 'package:salvador_desktop/presentation/desktop/view_model/chat_cubit.dart
 import 'package:salvador_desktop/presentation/desktop/view_model/chat_state.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/file_explorer_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/file_explorer_state.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/git_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/workspace_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/workspace_state.dart';
-import 'package:salvador_desktop/presentation/desktop/widgets/activity_panel.dart';
 import 'package:salvador_desktop/presentation/desktop/widgets/chat_widgets.dart';
+import 'package:salvador_desktop/presentation/desktop/widgets/activity_panel.dart';
 import 'package:salvador_desktop/presentation/desktop/widgets/files_panel.dart';
 import 'package:salvador_desktop/presentation/desktop/widgets/preview_pane.dart';
+import 'package:salvador_desktop/presentation/desktop/widgets/workspace_rail.dart';
 
 class DesktopView extends StatelessWidget {
   const DesktopView({super.key});
@@ -118,6 +122,7 @@ class _ShellScreenState extends State<_ShellScreen> {
   late final WorkspaceCubit _workspaceCubit;
   late final ChatCubit _chatCubit;
   late final FileExplorerCubit _fileExplorerCubit;
+  late final GitCubit _gitCubit;
   final _promptController = TextEditingController();
   final _promptFocus = FocusNode();
   final _scrollController = ScrollController();
@@ -126,6 +131,7 @@ class _ShellScreenState extends State<_ShellScreen> {
   int _messageCount = 0;
   bool _panelExpanded = false;
   bool _rightPanelExpanded = false;
+  WorkspaceSection _section = WorkspaceSection.chat;
 
   @override
   void initState() {
@@ -133,6 +139,7 @@ class _ShellScreenState extends State<_ShellScreen> {
     _workspaceCubit = AppInjector.inject<WorkspaceCubit>();
     _chatCubit = AppInjector.inject<ChatCubit>();
     _fileExplorerCubit = AppInjector.inject<FileExplorerCubit>();
+    _gitCubit = AppInjector.inject<GitCubit>();
     _promptController.addListener(_updateSuggestions);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _workspaceCubit.initialize();
@@ -144,11 +151,17 @@ class _ShellScreenState extends State<_ShellScreen> {
     _workspaceCubit.close();
     _chatCubit.close();
     _fileExplorerCubit.close();
+    _gitCubit.close();
     _promptController.dispose();
     _promptFocus.dispose();
     _scrollController.dispose();
     _filterController.dispose();
     super.dispose();
+  }
+
+  void _selectSection(WorkspaceSection section) {
+    if (_section == section) return;
+    setState(() => _section = section);
   }
 
   void _updateSuggestions() {
@@ -274,11 +287,13 @@ class _ShellScreenState extends State<_ShellScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isMac = defaultTargetPlatform == TargetPlatform.macOS;
     return MultiBlocProvider(
       providers: [
         BlocProvider<WorkspaceCubit>.value(value: _workspaceCubit),
         BlocProvider<ChatCubit>.value(value: _chatCubit),
         BlocProvider<FileExplorerCubit>.value(value: _fileExplorerCubit),
+        BlocProvider<GitCubit>.value(value: _gitCubit),
       ],
       child: MultiBlocListener(
         listeners: [
@@ -311,6 +326,17 @@ class _ShellScreenState extends State<_ShellScreen> {
             listenWhen: (previous, current) {
               if (current is! WorkspaceReady) return false;
               if (previous is! WorkspaceReady) return true;
+              return previous.root?.path != current.root?.path ||
+                  (previous.connecting && !current.connecting);
+            },
+            listener: (context, state) {
+              _gitCubit.setRoot((state as WorkspaceReady).root);
+            },
+          ),
+          BlocListener<WorkspaceCubit, WorkspaceState>(
+            listenWhen: (previous, current) {
+              if (current is! WorkspaceReady) return false;
+              if (previous is! WorkspaceReady) return true;
               return previous.connecting != current.connecting ||
                   previous.modelState != current.modelState;
             },
@@ -336,51 +362,69 @@ class _ShellScreenState extends State<_ShellScreen> {
             },
           ),
         ],
-        child: Scaffold(
-          body: Column(
-            children: [
-              const MacTitleBar(),
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (_panelExpanded)
-                      SizedBox(
-                        width: panelWidth,
-                        child: ActivityPanel(
-                          onCollapse: () =>
-                              setState(() => _panelExpanded = false),
-                        ),
-                      )
-                    else
-                      SizedBox(
-                        width: railWidth,
-                        child: ActivityRail(
-                          onExpand: () => setState(() => _panelExpanded = true),
-                        ),
-                      ),
-                    Expanded(child: _buildWorkspace()),
-                    if (_rightPanelExpanded)
-                      SizedBox(
-                        width: filesPanelWidth,
-                        child: FilesPanel(
-                          filterController: _filterController,
-                          onCollapse: () =>
-                              setState(() => _rightPanelExpanded = false),
-                        ),
-                      )
-                    else
+        child: CallbackShortcuts(
+          bindings: {
+            SingleActivator(
+              LogicalKeyboardKey.keyG,
+              control: !isMac,
+              meta: isMac,
+              shift: true,
+            ): () => _selectSection(WorkspaceSection.git),
+            SingleActivator(
+              LogicalKeyboardKey.keyC,
+              control: !isMac,
+              meta: isMac,
+              shift: true,
+            ): () => _selectSection(WorkspaceSection.chat),
+          },
+          child: Scaffold(
+            body: Column(
+              children: [
+                const MacTitleBar(),
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
                       SizedBox(
                         width: railWidth,
-                        child: FilesRail(
-                          onExpand: () =>
-                              setState(() => _rightPanelExpanded = true),
+                        child: WorkspaceRail(
+                          activeSection: _section,
+                          onSelectSection: _selectSection,
+                          onExpandActivity: () =>
+                              setState(() => _panelExpanded = true),
                         ),
                       ),
-                  ],
+                      if (_panelExpanded)
+                        SizedBox(
+                          width: panelWidth,
+                          child: ActivityPanel(
+                            onCollapse: () =>
+                                setState(() => _panelExpanded = false),
+                          ),
+                        ),
+                      Expanded(child: _buildWorkspace()),
+                      if (_rightPanelExpanded)
+                        SizedBox(
+                          width: filesPanelWidth,
+                          child: FilesPanel(
+                            filterController: _filterController,
+                            onCollapse: () =>
+                                setState(() => _rightPanelExpanded = false),
+                          ),
+                        )
+                      else
+                        SizedBox(
+                          width: railWidth,
+                          child: FilesRail(
+                            onExpand: () =>
+                                setState(() => _rightPanelExpanded = true),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -401,41 +445,46 @@ class _ShellScreenState extends State<_ShellScreen> {
           },
         ),
         Expanded(child: _buildCenter()),
-        BlocBuilder<ChatCubit, ChatState>(
-          builder: (context, chatState) {
-            final message = _chatErrorMessage(chatState as ChatIdle);
-            if (message == null) return const SizedBox.shrink();
-            return ErrorBanner(message: message);
-          },
-        ),
-        BlocBuilder<ChatCubit, ChatState>(
-          builder: (context, chatState) {
-            final idle = chatState as ChatIdle;
-            return BlocBuilder<WorkspaceCubit, WorkspaceState>(
-              builder: (context, workspaceState) {
-                final ready = _isReadyToSend(workspaceState);
-                return Composer(
-                  controller: _promptController,
-                  focusNode: _promptFocus,
-                  suggestions: _suggestions,
-                  pendingAttachments: idle.pendingAttachments,
-                  sending: idle.sending,
-                  ready: ready,
-                  onSuggestion: _insertSuggestion,
-                  onMention: _startMention,
-                  onAttach: _attachFiles,
-                  onRemoveAttachment: _chatCubit.removeAttachment,
-                  onSend: _send,
-                );
-              },
-            );
-          },
-        ),
+        if (_section == WorkspaceSection.chat) ...[
+          BlocBuilder<ChatCubit, ChatState>(
+            builder: (context, chatState) {
+              final message = _chatErrorMessage(chatState as ChatIdle);
+              if (message == null) return const SizedBox.shrink();
+              return ErrorBanner(message: message);
+            },
+          ),
+          BlocBuilder<ChatCubit, ChatState>(
+            builder: (context, chatState) {
+              final idle = chatState as ChatIdle;
+              return BlocBuilder<WorkspaceCubit, WorkspaceState>(
+                builder: (context, workspaceState) {
+                  final ready = _isReadyToSend(workspaceState);
+                  return Composer(
+                    controller: _promptController,
+                    focusNode: _promptFocus,
+                    suggestions: _suggestions,
+                    pendingAttachments: idle.pendingAttachments,
+                    sending: idle.sending,
+                    ready: ready,
+                    onSuggestion: _insertSuggestion,
+                    onMention: _startMention,
+                    onAttach: _attachFiles,
+                    onRemoveAttachment: _chatCubit.removeAttachment,
+                    onSend: _send,
+                  );
+                },
+              );
+            },
+          ),
+        ],
       ],
     );
   }
 
   Widget _buildCenter() {
+    if (_section == WorkspaceSection.git) {
+      return const GitWorkspace();
+    }
     return BlocBuilder<FileExplorerCubit, FileExplorerState>(
       builder: (context, fileExplorerState) {
         final loaded = fileExplorerState as FileExplorerLoaded;

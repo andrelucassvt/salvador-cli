@@ -88,15 +88,18 @@ class ModelMenu extends StatelessWidget {
               ),
               const SizedBox(width: 7),
               Flexible(
-                child: Text(
-                  selected ?? 'Sem modelo',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: ink,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'JetBrains Mono',
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 220),
+                  child: Text(
+                    selected ?? 'Sem modelo',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: ink,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'JetBrains Mono',
+                    ),
                   ),
                 ),
               ),

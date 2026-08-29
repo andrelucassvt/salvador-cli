@@ -5,10 +5,16 @@ import 'package:salvador_desktop/presentation/desktop/view_model/workspace_cubit
 import 'package:salvador_desktop/presentation/desktop/view_model/workspace_state.dart';
 
 class FolderMenu extends StatelessWidget {
-  const FolderMenu({super.key, required this.state, required this.cubit});
+  const FolderMenu({
+    super.key,
+    required this.state,
+    required this.cubit,
+    this.maxWidth = 240,
+  });
 
   final WorkspaceReady state;
   final WorkspaceCubit cubit;
+  final double maxWidth;
 
   String get _shortPath {
     final root = state.root;
@@ -100,14 +106,17 @@ class FolderMenu extends StatelessWidget {
               const Icon(Icons.folder_outlined, size: 16, color: muted),
               const SizedBox(width: 6),
               Flexible(
-                child: Text(
-                  _shortPath,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: ink,
-                    fontSize: 12,
-                    fontFamily: 'JetBrains Mono',
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: maxWidth),
+                  child: Text(
+                    _shortPath,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: ink,
+                      fontSize: 12,
+                      fontFamily: 'JetBrains Mono',
+                    ),
                   ),
                 ),
               ),

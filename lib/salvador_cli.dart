@@ -2,6 +2,7 @@ export 'src/agent.dart';
 export 'src/config.dart';
 export 'src/context_files.dart';
 export 'src/file_mentions.dart';
+export 'src/git.dart';
 export 'src/models.dart';
 export 'src/ollama_client.dart';
 export 'src/ollama_discovery.dart';
