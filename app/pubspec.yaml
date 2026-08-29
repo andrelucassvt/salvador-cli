@@ -11,9 +11,11 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_bloc: ^9.1.1
+  flutter_markdown_plus: ^1.0.12
   get_it: ^9.2.1
   salvador_cli:
     path: ..
+  url_launcher: ^6.3.2
   window_manager: ^0.5.2
 
 dev_dependencies:

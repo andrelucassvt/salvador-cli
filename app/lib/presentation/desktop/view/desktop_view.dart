@@ -454,16 +454,18 @@ class _ShellScreenState extends State<_ShellScreen> {
                 },
               );
             }
-            return ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.fromLTRB(28, 30, 28, 18),
-              itemCount: idle.messages.length + (idle.sending ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index == idle.messages.length) {
-                  return const ThinkingCard();
-                }
-                return MessageCard(entry: idle.messages[index]);
-              },
+            return SelectionArea(
+              child: ListView.builder(
+                controller: _scrollController,
+                padding: const EdgeInsets.fromLTRB(28, 30, 28, 18),
+                itemCount: idle.messages.length + (idle.sending ? 1 : 0),
+                itemBuilder: (context, index) {
+                  if (index == idle.messages.length) {
+                    return const ThinkingCard();
+                  }
+                  return MessageCard(entry: idle.messages[index]);
+                },
+              ),
             );
           },
         );

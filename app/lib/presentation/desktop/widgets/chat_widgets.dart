@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:salvador_cli/salvador_cli.dart';
 import 'package:salvador_desktop/domain/entities/chat_message_entity.dart';
 import 'package:salvador_desktop/presentation/desktop/theme/desktop_theme.dart';
 import 'package:salvador_desktop/presentation/desktop/widgets/file_chip.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class EmptyState extends StatelessWidget {
   const EmptyState({
@@ -121,24 +124,33 @@ class MessageCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              user ? 'VOCÊ' : 'SALVADOR',
-              style: TextStyle(
-                color: user ? Colors.white60 : ocean,
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.25,
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  user ? 'VOCÊ' : 'SALVADOR',
+                  style: TextStyle(
+                    color: user ? Colors.white60 : ocean,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.25,
+                  ),
+                ),
+                const Spacer(),
+                _CopyButton(text: entry.content, onDark: user),
+              ],
             ),
             const SizedBox(height: 8),
-            SelectableText(
-              entry.content,
-              style: TextStyle(
-                color: user ? Colors.white : ink,
-                fontSize: 14,
-                height: 1.52,
-              ),
-            ),
+            user
+                ? Text(
+                    entry.content,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      height: 1.52,
+                    ),
+                  )
+                : _MarkdownContent(content: entry.content),
             if (entry.mentionedFiles.isNotEmpty) ...[
               const SizedBox(height: 12),
               Wrap(
@@ -176,6 +188,129 @@ class MessageCard extends StatelessWidget {
               _MetricsBar(metrics: entry.metrics!),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MarkdownContent extends StatelessWidget {
+  const _MarkdownContent({required this.content});
+
+  final String content;
+
+  @override
+  Widget build(BuildContext context) {
+    final baseText = const TextStyle(color: ink, fontSize: 14, height: 1.52);
+    final codeText = const TextStyle(
+      color: ink,
+      fontSize: 13,
+      height: 1.45,
+      fontFamily: 'JetBrains Mono',
+    );
+    return MarkdownBody(
+      data: content,
+      onTapLink: (text, href, title) {
+        if (href == null) return;
+        final uri = Uri.tryParse(href);
+        if (uri != null) launchUrl(uri);
+      },
+      styleSheet: MarkdownStyleSheet(
+        p: baseText,
+        listBullet: baseText,
+        blockquote: baseText.copyWith(
+          color: muted,
+          fontStyle: FontStyle.italic,
+        ),
+        blockquoteDecoration: const BoxDecoration(
+          border: Border(left: BorderSide(color: line, width: 3)),
+        ),
+        blockquotePadding: const EdgeInsets.only(left: 12),
+        h1: baseText.copyWith(
+          fontSize: 22,
+          fontWeight: FontWeight.w800,
+          color: navy,
+        ),
+        h2: baseText.copyWith(
+          fontSize: 19,
+          fontWeight: FontWeight.w800,
+          color: navy,
+        ),
+        h3: baseText.copyWith(
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+          color: navy,
+        ),
+        h4: baseText.copyWith(
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+          color: navy,
+        ),
+        strong: baseText.copyWith(fontWeight: FontWeight.w700),
+        em: baseText.copyWith(fontStyle: FontStyle.italic),
+        a: baseText.copyWith(
+          color: ocean,
+          decoration: TextDecoration.underline,
+        ),
+        code: codeText.copyWith(backgroundColor: shell),
+        codeblockDecoration: BoxDecoration(
+          color: shell,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: line),
+        ),
+        codeblockPadding: const EdgeInsets.all(12),
+        horizontalRuleDecoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: line)),
+        ),
+        tableBorder: TableBorder.all(color: line),
+        tableCellsPadding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 6,
+        ),
+        tableHead: baseText.copyWith(fontWeight: FontWeight.w700),
+        tableBody: baseText,
+      ),
+    );
+  }
+}
+
+class _CopyButton extends StatefulWidget {
+  const _CopyButton({required this.text, required this.onDark});
+
+  final String text;
+  final bool onDark;
+
+  @override
+  State<_CopyButton> createState() => _CopyButtonState();
+}
+
+class _CopyButtonState extends State<_CopyButton> {
+  bool _copied = false;
+
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.text));
+    if (!mounted) return;
+    setState(() => _copied = true);
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.onDark ? Colors.white60 : muted;
+    return Tooltip(
+      message: _copied ? 'Copiado!' : 'Copiar mensagem',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: _copy,
+        child: Padding(
+          padding: const EdgeInsets.all(3),
+          child: Icon(
+            _copied ? Icons.check_rounded : Icons.copy_rounded,
+            size: 14,
+            color: _copied ? (widget.onDark ? Colors.white : ocean) : color,
+          ),
         ),
       ),
     );
@@ -319,4 +454,3 @@ class _PromptCard extends StatelessWidget {
     );
   }
 }
-
