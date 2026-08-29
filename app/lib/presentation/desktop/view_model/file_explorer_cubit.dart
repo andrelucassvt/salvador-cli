@@ -126,6 +126,28 @@ class FileExplorerCubit extends Cubit<FileExplorerState> {
     );
   }
 
+  List<String> skillSuggestions(String input, int cursor, {int limit = 6}) {
+    final root = _root;
+    if (root == null) return const [];
+    return _repository.skillSuggestions(
+      root: root,
+      input: input,
+      cursor: cursor,
+      limit: limit,
+    );
+  }
+
+  String insertSkill(String input, int cursor, String name) {
+    final root = _root;
+    if (root == null) return input;
+    return _repository.insertSkill(
+      root: root,
+      input: input,
+      cursor: cursor,
+      name: name,
+    );
+  }
+
   /// Insere a mencao do arquivo em preview na posicao do cursor, reutilizando
   /// a codificacao com aspas para caminhos com espaco.
   String mentionPreviewedFile(String input, int cursor) {

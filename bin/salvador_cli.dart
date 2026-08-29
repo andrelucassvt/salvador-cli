@@ -107,23 +107,40 @@ Future<void> _chat(
   String model,
   TerminalInput terminal,
 ) async {
+  final contextFiles = config.contextFiles
+      ? ContextFilesService(config.root)
+      : null;
+  final skillCommands =
+      contextFiles
+          ?.discoverSkills()
+          .map(
+            (skill) => TerminalCommand(
+              '/${skill.name}',
+              skill.description.isEmpty
+                  ? 'Carrega esta skill'
+                  : skill.description,
+            ),
+          )
+          .toList(growable: false) ??
+      const <TerminalCommand>[];
   final session = AgentSession(
     client: OllamaClient(model: model, baseUrl: config.host),
     root: config.root,
+    contextFiles: contextFiles,
     onToolCall: (call) => stdout.writeln('  > ${call.name}'),
   );
   final mentions = FileMentionService(config.root);
 
   stdout.writeln('\nLeve CLI | $model | ${config.root.path}');
   stdout.writeln('Digite @ para mencionar arquivos (setas + Tab).');
-  stdout.writeln('Digite / para ver os comandos (setas + Tab).');
+  stdout.writeln('Digite / para ver os comandos e skills (setas + Tab).');
 
   while (true) {
     stdout.writeln();
     final line = await terminal.readLine(
       prompt: 'voce> ',
       mentions: mentions,
-      commands: _chatCommands,
+      commands: [..._chatCommands, ...skillCommands],
     );
     if (line == null) break;
     final input = line.trim();
@@ -135,8 +152,15 @@ Future<void> _chat(
     }
     if (input.isEmpty) continue;
 
+    final expansion = input.startsWith('/') && contextFiles != null
+        ? contextFiles.expand(input)
+        : MentionExpansion(prompt: input);
+    for (final warning in expansion.warnings) {
+      stderr.writeln('  aviso> $warning');
+    }
+
     try {
-      final result = await session.sendDetailed(input);
+      final result = await session.sendDetailed(expansion.prompt);
       for (final warning in result.warnings) {
         stderr.writeln('  aviso> $warning');
       }

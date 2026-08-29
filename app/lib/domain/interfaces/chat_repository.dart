@@ -15,6 +15,7 @@ abstract class ChatRepository {
     required InferenceOptions options,
     required Directory? root,
     required AgentPermissions permissions,
+    required bool contextFilesEnabled,
   });
 
   Stream<ToolActivityEntity> get toolActivity;

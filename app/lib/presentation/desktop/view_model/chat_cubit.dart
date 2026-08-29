@@ -67,6 +67,7 @@ class ChatCubit extends Cubit<ChatState> {
     required InferenceOptions options,
     required Directory? root,
     required AgentPermissions permissions,
+    required bool contextFilesEnabled,
   }) {
     _repository.configureSession(
       host: host,
@@ -74,6 +75,7 @@ class ChatCubit extends Cubit<ChatState> {
       options: options,
       root: root,
       permissions: permissions,
+      contextFilesEnabled: contextFilesEnabled,
     );
     unawaited(_activitySubscription?.cancel());
     _activitySubscription = _repository.toolActivity.listen(_onActivity);

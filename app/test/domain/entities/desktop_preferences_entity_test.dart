@@ -47,5 +47,28 @@ void main() {
       expect(copy.host, original.host);
       expect(copy.recentRoots, original.recentRoots);
     });
+
+    test(
+      'contextFilesEnabled defaults, copies and participates in equality',
+      () {
+        const original = DesktopPreferencesEntity();
+
+        expect(original.contextFilesEnabled, isTrue);
+        expect(
+          original.copyWith(contextFilesEnabled: false).contextFilesEnabled,
+          isFalse,
+        );
+        expect(
+          original.copyWith(contextFilesEnabled: true).contextFilesEnabled,
+          isTrue,
+        );
+        expect(
+          original,
+          isNot(
+            equals(const DesktopPreferencesEntity(contextFilesEnabled: false)),
+          ),
+        );
+      },
+    );
   });
 }

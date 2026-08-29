@@ -47,6 +47,7 @@ class WorkspaceReady extends WorkspaceState {
     this.selectedModel,
     this.inference = const InferenceOptions(),
     this.permissions = const AgentPermissions(),
+    this.contextFilesEnabled = true,
     this.recentRoots = const [],
     this.sessions = const [],
     this.errorKind,
@@ -62,6 +63,7 @@ class WorkspaceReady extends WorkspaceState {
   final String? selectedModel;
   final InferenceOptions inference;
   final AgentPermissions permissions;
+  final bool contextFilesEnabled;
   final List<String> recentRoots;
   final List<PersistedSessionSummaryEntity> sessions;
   final WorkspaceErrorKind? errorKind;
@@ -79,6 +81,7 @@ class WorkspaceReady extends WorkspaceState {
     bool clearSelectedModel = false,
     InferenceOptions? inference,
     AgentPermissions? permissions,
+    bool? contextFilesEnabled,
     List<String>? recentRoots,
     List<PersistedSessionSummaryEntity>? sessions,
     WorkspaceErrorKind? errorKind,
@@ -97,6 +100,7 @@ class WorkspaceReady extends WorkspaceState {
           : (selectedModel ?? this.selectedModel),
       inference: inference ?? this.inference,
       permissions: permissions ?? this.permissions,
+      contextFilesEnabled: contextFilesEnabled ?? this.contextFilesEnabled,
       recentRoots: recentRoots ?? this.recentRoots,
       sessions: sessions ?? this.sessions,
       errorKind: clearError ? null : (errorKind ?? this.errorKind),
@@ -108,5 +112,5 @@ class WorkspaceReady extends WorkspaceState {
   String toString() =>
       'WorkspaceReady(host: $host, root: ${root?.path}, connecting: '
       '$connecting, modelState: $modelState, selectedModel: $selectedModel, '
-      'errorKind: $errorKind, error: $error)';
+      'contextFilesEnabled: $contextFilesEnabled, errorKind: $errorKind, error: $error)';
 }

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'context_files.dart';
 import 'file_mentions.dart';
 import 'models.dart';
 import 'ollama_client.dart';
@@ -17,13 +18,16 @@ class AgentSession {
     this.onToolCall,
     this.onToolResult,
     AgentPermissions permissions = const AgentPermissions(),
-  }) : _tools = ToolRegistry(root, permissions: permissions),
+    ContextFilesService? contextFiles,
+  }) : _tools = ToolRegistry(
+         root,
+         permissions: permissions,
+         contextFiles: contextFiles,
+       ),
        _mentions = root == null ? null : FileMentionService(root),
        _systemMessage = AgentMessage(
          role: 'system',
-         content: root == null
-             ? systemPrompt
-             : '$systemPrompt\nRaiz: ${root.absolute.path}',
+         content: _systemContent(root, contextFiles),
        ) {
     clear();
   }
@@ -36,6 +40,16 @@ class AgentSession {
   final ToolCallObserver? onToolCall;
   final ToolResultObserver? onToolResult;
   final List<AgentMessage> _messages = [];
+
+  static String _systemContent(
+    Directory? root,
+    ContextFilesService? contextFiles,
+  ) {
+    if (root == null) return systemPrompt;
+    final agentsMd = contextFiles?.agentsMdContext();
+    return '$systemPrompt\nRaiz: ${root.absolute.path}'
+        '${agentsMd ?? ''}';
+  }
 
   List<AgentMessage> get messages => List.unmodifiable(_messages);
 

@@ -17,6 +17,7 @@ Future<bool> _applySettings(
   required Duration? timeout,
   required bool allowEdit,
   required bool allowCommands,
+  required bool contextFilesEnabled,
 }) async {
   await workspaceCubit.saveSettings(
     hostText: hostText,
@@ -26,6 +27,7 @@ Future<bool> _applySettings(
     timeout: timeout,
     allowEdit: allowEdit,
     allowCommands: allowCommands,
+    contextFilesEnabled: contextFilesEnabled,
   );
   final state = workspaceCubit.state;
   return state is WorkspaceReady && state.errorKind == null;
@@ -49,6 +51,7 @@ class SettingsDialog extends StatelessWidget {
           timeout: workspace.inference.timeout,
           allowEdit: workspace.permissions.allowEdit,
           allowCommands: workspace.permissions.allowCommands,
+          contextFilesEnabled: workspace.contextFilesEnabled,
         ),
       ),
       child: _SettingsDialogBody(workspaceCubit: workspaceCubit),
@@ -314,6 +317,22 @@ class _SettingsDialogBodyState extends State<_SettingsDialogBody> {
                           value: false,
                           onChanged: null,
                         ),
+                        const SizedBox(height: 12),
+                        const _DialogLabel('CONTEXTO'),
+                        SwitchListTile(
+                          key: const Key('settings-context-files'),
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text(
+                            'Contexto de arquivos',
+                            style: TextStyle(fontSize: 13.5),
+                          ),
+                          subtitle: const Text(
+                            'Inclui AGENTS.md e disponibiliza skills do projeto para o agente.',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                          value: editing.contextFilesEnabled,
+                          onChanged: settingsCubit.updateContextFilesEnabled,
+                        ),
                         if (editing.errorKind != null) ...[
                           const SizedBox(height: 14),
                           Container(
@@ -366,6 +385,7 @@ class _SettingsDialogBodyState extends State<_SettingsDialogBody> {
                                       required timeout,
                                       required allowEdit,
                                       required allowCommands,
+                                      required contextFilesEnabled,
                                     }) => _applySettings(
                                       workspaceCubit,
                                       hostText: hostText,
@@ -375,6 +395,7 @@ class _SettingsDialogBodyState extends State<_SettingsDialogBody> {
                                       timeout: timeout,
                                       allowEdit: allowEdit,
                                       allowCommands: allowCommands,
+                                      contextFilesEnabled: contextFilesEnabled,
                                     ),
                               ),
                         icon: editing.saving

@@ -12,6 +12,8 @@ class FakeWorkspaceRepository implements WorkspaceRepository {
   FilePreviewEntity? previewToReturn;
   List<String> suggestionsToReturn = const [];
   String insertMentionResult = '';
+  List<String> skillSuggestionsToReturn = const [];
+  String insertSkillResult = '';
   int listTreeCallCount = 0;
 
   @override
@@ -55,4 +57,20 @@ class FakeWorkspaceRepository implements WorkspaceRepository {
     required int cursor,
     required String path,
   }) => insertMentionResult;
+
+  @override
+  List<String> skillSuggestions({
+    required Directory root,
+    required String input,
+    required int cursor,
+    int limit = 6,
+  }) => skillSuggestionsToReturn;
+
+  @override
+  String insertSkill({
+    required Directory root,
+    required String input,
+    required int cursor,
+    required String name,
+  }) => insertSkillResult;
 }

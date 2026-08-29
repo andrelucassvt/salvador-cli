@@ -10,6 +10,7 @@ import 'package:salvador_desktop/domain/entities/workspace_tree_entry_entity.dar
 class WorkspaceDataSource {
   Directory? _cachedRoot;
   FileMentionService? _mentions;
+  ContextFilesService? _contextFiles;
   ToolRegistry? _readOnlyTools;
 
   List<WorkspaceTreeEntryEntity> listTree(Directory root) {
@@ -46,10 +47,43 @@ class WorkspaceDataSource {
     return input.replaceRange(active.start, cursor, '$encoded ');
   }
 
+  List<String> skillSuggestions(
+    Directory root,
+    String input,
+    int cursor, {
+    int limit = 6,
+  }) {
+    _ensureContext(root);
+    if (!input.startsWith('/') || input.contains(RegExp(r'\s'))) {
+      return const [];
+    }
+    final safeCursor = cursor.clamp(0, input.length);
+    final query = input.substring(1, safeCursor).toLowerCase();
+    return _contextFiles!
+        .discoverSkills()
+        .where((skill) => skill.name.toLowerCase().contains(query))
+        .take(limit)
+        .map((skill) => '/${skill.name}')
+        .toList(growable: false);
+  }
+
+  String insertSkill(Directory root, String input, int cursor, String name) {
+    _ensureContext(root);
+    final safeCursor = cursor.clamp(0, input.length);
+    final normalized = name.startsWith('/') ? name.substring(1) : name;
+    if (!_contextFiles!.discoverSkills().any(
+      (skill) => skill.name == normalized,
+    )) {
+      return input;
+    }
+    return input.replaceRange(0, safeCursor, '/$normalized ');
+  }
+
   void _ensureContext(Directory root) {
     if (_cachedRoot?.path == root.path) return;
     _cachedRoot = root;
     _mentions = FileMentionService(root)..refresh();
+    _contextFiles = ContextFilesService(root);
     _readOnlyTools = ToolRegistry(root, permissions: AgentPermissions.readOnly);
   }
 

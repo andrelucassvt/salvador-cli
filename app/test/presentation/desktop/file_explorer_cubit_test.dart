@@ -163,4 +163,15 @@ void main() {
       ],
     );
   });
+
+  test('sugere e insere skill pelo prefixo de barra', () async {
+    fakeRepository.skillSuggestionsToReturn = const ['/flow'];
+    fakeRepository.insertSkillResult = '/flow ';
+    final cubit = FileExplorerCubit(fakeRepository);
+    addTearDown(cubit.close);
+    await cubit.setRoot(root);
+
+    expect(cubit.skillSuggestions('/flo', 4), ['/flow']);
+    expect(cubit.insertSkill('/flo', 4, 'flow'), '/flow ');
+  });
 }

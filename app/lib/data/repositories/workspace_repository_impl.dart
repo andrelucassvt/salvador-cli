@@ -99,6 +99,22 @@ class WorkspaceRepositoryImpl implements WorkspaceRepository {
     required String path,
   }) => _dataSource.insertMention(root, input, cursor, path);
 
+  @override
+  List<String> skillSuggestions({
+    required Directory root,
+    required String input,
+    required int cursor,
+    int limit = 6,
+  }) => _dataSource.skillSuggestions(root, input, cursor, limit: limit);
+
+  @override
+  String insertSkill({
+    required Directory root,
+    required String input,
+    required int cursor,
+    required String name,
+  }) => _dataSource.insertSkill(root, input, cursor, name);
+
   static String _languageFor(String path) {
     final dot = path.lastIndexOf('.');
     if (dot < 0) return 'texto';

@@ -78,6 +78,7 @@ class DesktopStorageService {
         allowEdit: json['allow_edit'] as bool? ?? true,
         allowCommands: json['allow_commands'] as bool? ?? true,
       ),
+      contextFilesEnabled: json['context_files_enabled'] as bool? ?? true,
       activeRoot: json['active_root'] as String?,
       recentRoots: _stringList(json['recent_roots']),
       sessions: sessions is List
@@ -110,6 +111,7 @@ class DesktopStorageService {
       'timeout_seconds': state.inference.timeout!.inSeconds,
     'allow_edit': state.permissions.allowEdit,
     'allow_commands': state.permissions.allowCommands,
+    'context_files_enabled': state.contextFilesEnabled,
     if (state.activeRoot != null) 'active_root': state.activeRoot,
     'recent_roots': _normalizeRoots(state.recentRoots),
     'sessions': _normalizeSessions(state.sessions)

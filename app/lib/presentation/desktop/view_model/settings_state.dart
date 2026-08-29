@@ -22,6 +22,7 @@ class SettingsEditing extends SettingsState {
     this.timeout,
     required this.allowEdit,
     required this.allowCommands,
+    this.contextFilesEnabled = true,
     this.testing = false,
     this.testResult,
     this.saving = false,
@@ -37,6 +38,7 @@ class SettingsEditing extends SettingsState {
   final Duration? timeout;
   final bool allowEdit;
   final bool allowCommands;
+  final bool contextFilesEnabled;
   final bool testing;
   final HostTestResultEntity? testResult;
   final bool saving;
@@ -54,6 +56,7 @@ class SettingsEditing extends SettingsState {
     bool clearTimeout = false,
     bool? allowEdit,
     bool? allowCommands,
+    bool? contextFilesEnabled,
     bool? testing,
     HostTestResultEntity? testResult,
     bool clearTestResult = false,
@@ -71,6 +74,7 @@ class SettingsEditing extends SettingsState {
       timeout: clearTimeout ? null : (timeout ?? this.timeout),
       allowEdit: allowEdit ?? this.allowEdit,
       allowCommands: allowCommands ?? this.allowCommands,
+      contextFilesEnabled: contextFilesEnabled ?? this.contextFilesEnabled,
       testing: testing ?? this.testing,
       testResult: clearTestResult ? null : (testResult ?? this.testResult),
       saving: saving ?? this.saving,

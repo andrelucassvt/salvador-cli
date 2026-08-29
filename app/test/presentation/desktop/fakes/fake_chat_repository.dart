@@ -18,6 +18,7 @@ class FakeChatRepository implements ChatRepository {
   String? lastMessage;
   List<String>? lastImages;
   Directory? lastRoot;
+  bool? lastContextFilesEnabled;
 
   @override
   Stream<ToolActivityEntity> get toolActivity => activityController.stream;
@@ -29,9 +30,11 @@ class FakeChatRepository implements ChatRepository {
     required InferenceOptions options,
     required Directory? root,
     required AgentPermissions permissions,
+    required bool contextFilesEnabled,
   }) {
     configureCallCount++;
     lastRoot = root;
+    lastContextFilesEnabled = contextFilesEnabled;
   }
 
   @override

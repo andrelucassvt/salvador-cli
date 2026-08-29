@@ -8,6 +8,8 @@ class FakeWorkspaceDataSource implements WorkspaceDataSource {
   String readFileResult = 'conteudo';
   List<String> suggestions = const [];
   String insertMentionResult = '';
+  List<String> skillSuggestionsResult = const [];
+  String insertSkillResult = '';
 
   @override
   List<WorkspaceTreeEntryEntity> listTree(Directory root) => tree;
@@ -26,4 +28,16 @@ class FakeWorkspaceDataSource implements WorkspaceDataSource {
   @override
   String insertMention(Directory root, String input, int cursor, String path) =>
       insertMentionResult;
+
+  @override
+  List<String> skillSuggestions(
+    Directory root,
+    String input,
+    int cursor, {
+    int limit = 6,
+  }) => skillSuggestionsResult;
+
+  @override
+  String insertSkill(Directory root, String input, int cursor, String name) =>
+      insertSkillResult;
 }

@@ -26,6 +26,7 @@ class FakeChatAgentDataSource implements ChatAgentDataSource {
     required InferenceOptions options,
     required Directory? root,
     required AgentPermissions permissions,
+    required bool contextFilesEnabled,
   }) {
     configureCallCount++;
   }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'context_files.dart';
 import 'models.dart';
 
 abstract interface class AgentTool {
@@ -35,11 +36,13 @@ class ToolRegistry {
   ToolRegistry(
     Directory? root, {
     AgentPermissions permissions = const AgentPermissions(),
+    ContextFilesService? contextFiles,
   }) : _permissions = permissions,
        _tools = root == null
            ? const []
            : [
                ReadFileTool(root),
+               if (contextFiles != null) UseSkillTool(root, contextFiles),
                if (permissions.allowEdit) WriteFileTool(root),
                if (permissions.allowEdit) ReplaceInFileTool(root),
                if (permissions.allowCommands) RunCommandTool(root),
@@ -73,6 +76,49 @@ class ToolRegistry {
     } on TimeoutException {
       return 'ERRO: comando excedeu o limite de tempo';
     }
+  }
+}
+
+class UseSkillTool extends WorkspaceTool {
+  UseSkillTool(super.root, this._contextFiles);
+
+  final ContextFilesService _contextFiles;
+
+  @override
+  ToolDefinition get definition {
+    final skills = _contextFiles.discoverSkills();
+    final available = skills.isEmpty
+        ? 'nenhuma'
+        : skills
+              .map(
+                (skill) => skill.description.isEmpty
+                    ? skill.name
+                    : '${skill.name} (${skill.description})',
+              )
+              .join(', ');
+    return ToolDefinition(
+      name: 'use_skill',
+      description: 'Le as instrucoes de uma skill. Disponiveis: $available.',
+      properties: const {
+        'name': {'type': 'string', 'description': 'Nome da skill'},
+      },
+      required: const ['name'],
+    );
+  }
+
+  @override
+  Future<String> execute(Map<String, Object?> arguments) async {
+    final name = requiredString(arguments, 'name');
+    final content = _contextFiles.skillContent(name);
+    if (content != null) return content;
+    final available = _contextFiles
+        .discoverSkills()
+        .map((skill) => skill.name)
+        .join(', ');
+    throw ToolException(
+      'skill nao encontrada: $name. Skills disponiveis: '
+      '${available.isEmpty ? "nenhuma" : available}',
+    );
   }
 }
 

@@ -22,6 +22,7 @@ class ChatRepositoryImpl implements ChatRepository {
     required InferenceOptions options,
     required Directory? root,
     required AgentPermissions permissions,
+    required bool contextFilesEnabled,
   }) {
     _dataSource.configureSession(
       host: host,
@@ -29,6 +30,7 @@ class ChatRepositoryImpl implements ChatRepository {
       options: options,
       root: root,
       permissions: permissions,
+      contextFilesEnabled: contextFilesEnabled,
     );
   }
 

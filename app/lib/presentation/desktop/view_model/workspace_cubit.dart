@@ -49,6 +49,7 @@ class WorkspaceCubit extends Cubit<WorkspaceState> {
         selectedModel: saved.model,
         inference: saved.inference,
         permissions: saved.permissions,
+        contextFilesEnabled: saved.contextFilesEnabled,
         recentRoots: saved.recentRoots,
         sessions: saved.sessions,
       ),
@@ -193,6 +194,7 @@ class WorkspaceCubit extends Cubit<WorkspaceState> {
     required Duration? timeout,
     required bool allowEdit,
     required bool allowCommands,
+    required bool contextFilesEnabled,
   }) async {
     final current = state;
     if (current is! WorkspaceReady) return;
@@ -258,6 +260,7 @@ class WorkspaceCubit extends Cubit<WorkspaceState> {
         selectedModel: selectedModel,
         inference: nextInference,
         permissions: nextPermissions,
+        contextFilesEnabled: contextFilesEnabled,
         clearError: true,
       ),
     );
@@ -386,6 +389,7 @@ class WorkspaceCubit extends Cubit<WorkspaceState> {
         model: current.selectedModel,
         inference: current.inference,
         permissions: current.permissions,
+        contextFilesEnabled: current.contextFilesEnabled,
         activeRoot: current.root?.path,
         recentRoots: current.recentRoots.length > _maxRecentRoots
             ? current.recentRoots.sublist(0, _maxRecentRoots)

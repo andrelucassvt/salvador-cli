@@ -34,6 +34,19 @@ void main() {
             .having((s) => s.hostText, 'hostText', 'http://127.0.0.1:11434'),
       ],
     );
+
+    blocTest<SettingsCubit, SettingsState>(
+      'updateContextFilesEnabled_changesOnlyContextFilesEnabled',
+      build: () => SettingsCubit(fakeRepository, initial: initialState()),
+      act: (cubit) => cubit.updateContextFilesEnabled(false),
+      expect: () => [
+        isA<SettingsEditing>().having(
+          (s) => s.contextFilesEnabled,
+          'contextFilesEnabled',
+          false,
+        ),
+      ],
+    );
   });
 
   group('SettingsCubit.testHost', () {
@@ -99,6 +112,7 @@ void main() {
               required timeout,
               required allowEdit,
               required allowCommands,
+              required contextFilesEnabled,
             }) async => fail('onSave nao deveria ser chamado'),
       ),
       expect: () => [
@@ -107,6 +121,34 @@ void main() {
           'errorKind',
           SettingsErrorKind.invalidHost,
         ),
+      ],
+    );
+
+    blocTest<SettingsCubit, SettingsState>(
+      'save_passesContextFilesEnabledToCallback',
+      build: () => SettingsCubit(
+        fakeRepository,
+        initial: initialState().copyWith(contextFilesEnabled: false),
+      ),
+      act: (cubit) => cubit.save(
+        onSave:
+            ({
+              required hostText,
+              required temperature,
+              required contextLength,
+              required keepAlive,
+              required timeout,
+              required allowEdit,
+              required allowCommands,
+              required contextFilesEnabled,
+            }) async {
+              expect(contextFilesEnabled, isFalse);
+              return true;
+            },
+      ),
+      expect: () => [
+        isA<SettingsEditing>().having((s) => s.saving, 'saving', true),
+        isA<SettingsEditing>().having((s) => s.saved, 'saved', true),
       ],
     );
 
@@ -123,6 +165,7 @@ void main() {
               required timeout,
               required allowEdit,
               required allowCommands,
+              required contextFilesEnabled,
             }) async => true,
       ),
       expect: () => [
@@ -146,6 +189,7 @@ void main() {
               required timeout,
               required allowEdit,
               required allowCommands,
+              required contextFilesEnabled,
             }) async => false,
       ),
       expect: () => [

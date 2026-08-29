@@ -13,6 +13,7 @@ typedef SaveSettingsCallback =
       required Duration? timeout,
       required bool allowEdit,
       required bool allowCommands,
+      required bool contextFilesEnabled,
     });
 
 /// Estado local do formulario do dialogo de configuracoes. Diferente de
@@ -48,6 +49,9 @@ class SettingsCubit extends Cubit<SettingsState> {
 
   void updateAllowCommands(bool value) =>
       _update((s) => s.copyWith(allowCommands: value));
+
+  void updateContextFilesEnabled(bool value) =>
+      _update((s) => s.copyWith(contextFilesEnabled: value));
 
   Future<void> testHost() async {
     final current = state;
@@ -139,6 +143,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       timeout: current.timeout,
       allowEdit: current.allowEdit,
       allowCommands: current.allowCommands,
+      contextFilesEnabled: current.contextFilesEnabled,
     );
     if (success) {
       emit((state as SettingsEditing).copyWith(saving: false, saved: true));

@@ -62,6 +62,7 @@ void main() {
       options: const InferenceOptions(),
       root: Directory.systemTemp,
       permissions: const AgentPermissions(),
+      contextFilesEnabled: true,
     );
 
     expect(fakeDataSource.configureCallCount, 1);

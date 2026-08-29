@@ -5,12 +5,14 @@ class CliConfig {
     required this.model,
     required this.host,
     required this.root,
+    required this.contextFiles,
   });
 
   factory CliConfig.parse(List<String> arguments) {
     var model = Platform.environment['OLLAMA_MODEL'];
     var host = Platform.environment['OLLAMA_HOST'] ?? 'http://127.0.0.1:11434';
     var root = Directory.current.path;
+    var contextFiles = true;
 
     for (var index = 0; index < arguments.length; index++) {
       final argument = arguments[index];
@@ -28,6 +30,8 @@ class CliConfig {
           host = nextValue();
         case '--root':
           root = nextValue();
+        case '--no-context':
+          contextFiles = false;
         case '--help' || '-h':
           throw const HelpRequested();
         default:
@@ -45,12 +49,18 @@ class CliConfig {
       throw FormatException('Raiz nao encontrada: ${rootDirectory.path}');
     }
 
-    return CliConfig(model: model, host: hostUri, root: rootDirectory);
+    return CliConfig(
+      model: model,
+      host: hostUri,
+      root: rootDirectory,
+      contextFiles: contextFiles,
+    );
   }
 
   final String? model;
   final Uri host;
   final Directory root;
+  final bool contextFiles;
 }
 
 class HelpRequested implements Exception {
@@ -64,6 +74,7 @@ Uso: dart run bin/salvador_cli.dart [opcoes]
   --model NOME   Escolhe o modelo sem perguntar (padrao: selecao interativa)
   --host URL     URL do Ollama (padrao: http://127.0.0.1:11434)
   --root CAMINHO Raiz permitida para as ferramentas (padrao: diretorio atual)
+  --no-context  Desliga AGENTS.md e skills do projeto
   -h, --help     Exibe esta ajuda
 
 No chat, use @ para mencionar arquivos, /clear para limpar a sessao e /exit

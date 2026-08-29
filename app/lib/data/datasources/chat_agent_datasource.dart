@@ -17,6 +17,7 @@ class ChatAgentDataSource {
       StreamController<ToolActivityEntity>.broadcast();
 
   AgentSession? _session;
+  ContextFilesService? _contextFiles;
 
   Stream<ToolActivityEntity> get toolActivity => _activityController.stream;
 
@@ -26,28 +27,45 @@ class ChatAgentDataSource {
     required InferenceOptions options,
     required Directory? root,
     required AgentPermissions permissions,
+    required bool contextFilesEnabled,
   }) {
     final client = _clientFactory(
       model: model,
       baseUrl: host,
       options: options,
     );
+    _contextFiles = root != null && contextFilesEnabled
+        ? ContextFilesService(root)
+        : null;
     _session = AgentSession(
       client: client,
       root: root,
       permissions: permissions,
+      contextFiles: _contextFiles,
       onToolResult: (call, result) {
         _activityController.add(ToolActivityEntity(call: call, result: result));
       },
     );
   }
 
-  Future<AgentTurnResult> send(String message, {List<String> images = const []}) {
+  Future<AgentTurnResult> send(
+    String message, {
+    List<String> images = const [],
+  }) async {
     final session = _session;
     if (session == null) {
       throw const AgentException('sessao do agente nao configurada');
     }
-    return session.sendDetailed(message, images: images);
+    final expansion = message.startsWith('/') && _contextFiles != null
+        ? _contextFiles!.expand(message)
+        : MentionExpansion(prompt: message);
+    final result = await session.sendDetailed(expansion.prompt, images: images);
+    return AgentTurnResult(
+      answer: result.answer,
+      metrics: result.metrics,
+      mentionedFiles: result.mentionedFiles,
+      warnings: [...expansion.warnings, ...result.warnings],
+    );
   }
 
   void clearSession() => _session?.clear();

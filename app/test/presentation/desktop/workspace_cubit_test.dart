@@ -285,6 +285,7 @@ void main() {
           timeout: null,
           allowEdit: true,
           allowCommands: true,
+          contextFilesEnabled: true,
         );
       },
       expect: () => [
@@ -314,12 +315,37 @@ void main() {
         timeout: const Duration(seconds: 60),
         allowEdit: false,
         allowCommands: false,
+        contextFilesEnabled: true,
       ),
       verify: (cubit) {
         expect(fakeStorage.saveCallCount, greaterThan(0));
         expect(fakeStorage.lastSaved!.inference.temperature, 0.7);
         expect(fakeStorage.lastSaved!.permissions.allowEdit, isFalse);
+        expect(fakeStorage.lastSaved!.contextFilesEnabled, isTrue);
       },
+    );
+
+    blocTest<WorkspaceCubit, WorkspaceState>(
+      'saveSettings_persistsContextFilesEnabled',
+      build: buildCubit,
+      seed: () => WorkspaceReady(
+        host: Uri.parse('http://127.0.0.1:11434'),
+        root: root,
+        models: const [OllamaModelInfo(name: 'llama3.2:3b')],
+        selectedModel: 'llama3.2:3b',
+      ),
+      act: (cubit) => cubit.saveSettings(
+        hostText: 'http://127.0.0.1:11434',
+        temperature: 0.1,
+        contextLength: null,
+        keepAlive: null,
+        timeout: null,
+        allowEdit: true,
+        allowCommands: true,
+        contextFilesEnabled: false,
+      ),
+      verify: (_) =>
+          expect(fakeStorage.lastSaved!.contextFilesEnabled, isFalse),
     );
   });
 }

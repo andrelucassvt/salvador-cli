@@ -10,6 +10,7 @@ class DesktopPreferencesEntity {
     this.model,
     this.inference = const InferenceOptions(),
     this.permissions = const AgentPermissions(),
+    this.contextFilesEnabled = true,
     this.activeRoot,
     this.recentRoots = const [],
     this.sessions = const [],
@@ -19,6 +20,7 @@ class DesktopPreferencesEntity {
   final String? model;
   final InferenceOptions inference;
   final AgentPermissions permissions;
+  final bool contextFilesEnabled;
   final String? activeRoot;
   final List<String> recentRoots;
   final List<PersistedSessionSummaryEntity> sessions;
@@ -28,6 +30,7 @@ class DesktopPreferencesEntity {
     String? model,
     InferenceOptions? inference,
     AgentPermissions? permissions,
+    bool? contextFilesEnabled,
     String? activeRoot,
     List<String>? recentRoots,
     List<PersistedSessionSummaryEntity>? sessions,
@@ -37,6 +40,7 @@ class DesktopPreferencesEntity {
       model: model ?? this.model,
       inference: inference ?? this.inference,
       permissions: permissions ?? this.permissions,
+      contextFilesEnabled: contextFilesEnabled ?? this.contextFilesEnabled,
       activeRoot: activeRoot ?? this.activeRoot,
       recentRoots: recentRoots ?? this.recentRoots,
       sessions: sessions ?? this.sessions,
@@ -51,6 +55,7 @@ class DesktopPreferencesEntity {
           model == other.model &&
           inference == other.inference &&
           permissions == other.permissions &&
+          contextFilesEnabled == other.contextFilesEnabled &&
           activeRoot == other.activeRoot &&
           listEquals(recentRoots, other.recentRoots) &&
           listEquals(sessions, other.sessions);
@@ -61,6 +66,7 @@ class DesktopPreferencesEntity {
     model,
     inference,
     permissions,
+    contextFilesEnabled,
     activeRoot,
     Object.hashAll(recentRoots),
     Object.hashAll(sessions),
@@ -69,6 +75,6 @@ class DesktopPreferencesEntity {
   @override
   String toString() =>
       'DesktopPreferencesEntity(host: $host, model: $model, '
-      'activeRoot: $activeRoot, recentRoots: $recentRoots, '
+      'activeRoot: $activeRoot, contextFilesEnabled: $contextFilesEnabled, recentRoots: $recentRoots, '
       'sessions: ${sessions.length})';
 }

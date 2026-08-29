@@ -59,6 +59,7 @@ void main() {
       expect(restored.inference.timeout, const Duration(seconds: 45));
       expect(restored.permissions.allowEdit, isFalse);
       expect(restored.permissions.allowCommands, isTrue);
+      expect(restored.contextFilesEnabled, isTrue);
       expect(restored.activeRoot, '/projetos/salvador');
       expect(restored.recentRoots, ['/projetos/salvador', '/projetos/outro']);
       expect(restored.sessions, hasLength(1));
@@ -139,7 +140,23 @@ void main() {
     expect(state.sessions, isEmpty);
     expect(state.inference.temperature, 0.1);
     expect(state.permissions.allowEdit, isTrue);
+    expect(state.contextFilesEnabled, isTrue);
   });
+
+  test(
+    'persiste contextFilesEnabled e le JSON antigo com default true',
+    () async {
+      final store = DesktopStorageService(file: stateFile);
+      await store.save(
+        const DesktopPreferencesEntity(contextFilesEnabled: false),
+      );
+
+      expect((await store.load()).contextFilesEnabled, isFalse);
+
+      await stateFile.writeAsString(jsonEncode({'version': 1}));
+      expect((await store.load()).contextFilesEnabled, isTrue);
+    },
+  );
 
   test('grava arquivo valido sem deixar temporario no diretorio', () async {
     final store = DesktopStorageService(file: stateFile);

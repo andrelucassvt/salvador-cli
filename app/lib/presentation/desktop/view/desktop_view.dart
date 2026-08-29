@@ -154,10 +154,14 @@ class _ShellScreenState extends State<_ShellScreen> {
   void _updateSuggestions() {
     final selection = _promptController.selection;
     final cursor = selection.isValid ? selection.extentOffset : 0;
-    final next = _fileExplorerCubit.fileSuggestions(
-      _promptController.text,
-      cursor,
-    );
+    final workspace = _workspaceCubit.state;
+    final useSkills =
+        workspace is WorkspaceReady &&
+        workspace.contextFilesEnabled &&
+        _promptController.text.startsWith('/');
+    final next = useSkills
+        ? _fileExplorerCubit.skillSuggestions(_promptController.text, cursor)
+        : _fileExplorerCubit.fileSuggestions(_promptController.text, cursor);
     if (next.toString() == _suggestions.toString()) return;
     setState(() => _suggestions = next);
   }
@@ -197,7 +201,14 @@ class _ShellScreenState extends State<_ShellScreen> {
   void _insertSuggestion(String path) {
     final oldText = _promptController.text;
     final oldCursor = _promptController.selection.extentOffset;
-    final newText = _fileExplorerCubit.insertMention(oldText, oldCursor, path);
+    final workspace = _workspaceCubit.state;
+    final useSkills =
+        workspace is WorkspaceReady &&
+        workspace.contextFilesEnabled &&
+        oldText.startsWith('/');
+    final newText = useSkills
+        ? _fileExplorerCubit.insertSkill(oldText, oldCursor, path)
+        : _fileExplorerCubit.insertMention(oldText, oldCursor, path);
     final newCursor = (oldCursor + newText.length - oldText.length).clamp(
       0,
       newText.length,
@@ -279,7 +290,8 @@ class _ShellScreenState extends State<_ShellScreen> {
               return previous.root?.path != current.root?.path ||
                   previous.host != current.host ||
                   previous.selectedModel != current.selectedModel ||
-                  previous.permissions != current.permissions;
+                  previous.permissions != current.permissions ||
+                  previous.contextFilesEnabled != current.contextFilesEnabled;
             },
             listener: (context, state) {
               final ready = state as WorkspaceReady;
@@ -291,6 +303,7 @@ class _ShellScreenState extends State<_ShellScreen> {
                 options: ready.inference,
                 root: ready.root,
                 permissions: ready.permissions,
+                contextFilesEnabled: ready.contextFilesEnabled,
               );
             },
           ),

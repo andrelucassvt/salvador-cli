@@ -29,4 +29,18 @@ abstract class WorkspaceRepository {
     required int cursor,
     required String path,
   });
+
+  List<String> skillSuggestions({
+    required Directory root,
+    required String input,
+    required int cursor,
+    int limit = 6,
+  });
+
+  String insertSkill({
+    required Directory root,
+    required String input,
+    required int cursor,
+    required String name,
+  });
 }
