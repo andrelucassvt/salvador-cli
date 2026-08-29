@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:salvador_cli/salvador_cli.dart';
 import 'package:salvador_desktop/config/error/app_exception.dart';
@@ -165,32 +166,49 @@ class _GitAssistantDrawerState extends State<GitAssistantDrawer> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Expanded(
-                          child: TextField(
-                            key: const Key('git-assistant-field'),
-                            controller: _controller,
-                            minLines: 1,
-                            maxLines: 5,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12.5,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: idle.sending
-                                  ? 'Aguardando resposta…'
-                                  : 'Pergunte sobre o repositório…',
-                              hintStyle: const TextStyle(color: Colors.white38),
-                              filled: true,
-                              fillColor: Colors.white.withValues(alpha: .07),
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 10,
+                          child: Focus(
+                            onKeyEvent: (_, event) {
+                              if (event is KeyDownEvent &&
+                                  event.logicalKey ==
+                                      LogicalKeyboardKey.enter &&
+                                  !HardwareKeyboard.instance.isShiftPressed) {
+                                if (idle.sending) {
+                                  return KeyEventResult.handled;
+                                }
+                                _send();
+                                return KeyEventResult.handled;
+                              }
+                              return KeyEventResult.ignored;
+                            },
+                            child: TextField(
+                              key: const Key('git-assistant-field'),
+                              controller: _controller,
+                              minLines: 1,
+                              maxLines: 5,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12.5,
                               ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide: BorderSide.none,
+                              decoration: InputDecoration(
+                                hintText: idle.sending
+                                    ? 'Aguardando resposta…'
+                                    : 'Pergunte sobre o repositório…',
+                                hintStyle: const TextStyle(
+                                  color: Colors.white38,
+                                ),
+                                filled: true,
+                                fillColor: Colors.white.withValues(alpha: .07),
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
+                                ),
+                                enabled: !idle.sending,
                               ),
-                              enabled: !idle.sending,
                             ),
                           ),
                         ),
