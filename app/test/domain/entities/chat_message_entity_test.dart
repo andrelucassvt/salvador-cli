@@ -57,5 +57,45 @@ void main() {
       expect(copy.content, 'tchau');
       expect(copy.role, original.role);
     });
+
+    test('equals_whenSameAttachedFiles_returnsTrue', () {
+      const a = ChatMessageEntity(
+        role: ChatRole.user,
+        content: 'ola',
+        attachedFiles: ['a.txt'],
+      );
+      const b = ChatMessageEntity(
+        role: ChatRole.user,
+        content: 'ola',
+        attachedFiles: ['a.txt'],
+      );
+
+      expect(a, equals(b));
+      expect(a.hashCode, equals(b.hashCode));
+    });
+
+    test('equals_whenAttachedFilesDiffer_returnsFalse', () {
+      const a = ChatMessageEntity(
+        role: ChatRole.user,
+        content: 'ola',
+        attachedFiles: ['a.txt'],
+      );
+      const b = ChatMessageEntity(
+        role: ChatRole.user,
+        content: 'ola',
+        attachedFiles: ['b.txt'],
+      );
+
+      expect(a, isNot(equals(b)));
+    });
+
+    test('copyWith_whenAttachedFilesGiven_changesOnlyAttachedFiles', () {
+      const original = ChatMessageEntity(role: ChatRole.user, content: 'ola');
+
+      final copy = original.copyWith(attachedFiles: ['a.txt']);
+
+      expect(copy.attachedFiles, ['a.txt']);
+      expect(copy.content, original.content);
+    });
   });
 }

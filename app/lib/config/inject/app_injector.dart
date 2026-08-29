@@ -1,5 +1,6 @@
 import 'package:get_it/get_it.dart';
 import 'package:salvador_desktop/common/services/desktop_storage_service.dart';
+import 'package:salvador_desktop/common/services/file_attachment_service.dart';
 import 'package:salvador_desktop/common/services/system_memory_service.dart';
 import 'package:salvador_desktop/data/datasources/chat_agent_datasource.dart';
 import 'package:salvador_desktop/data/datasources/ollama_remote_datasource.dart';
@@ -28,6 +29,9 @@ class AppInjector {
     );
     inject.registerLazySingleton<SystemMemoryReader>(
       () => SystemMemoryReader(),
+    );
+    inject.registerLazySingleton<FileAttachmentService>(
+      () => const FileAttachmentService(),
     );
 
     // DataSources
@@ -61,7 +65,10 @@ class AppInjector {
       ),
     );
     inject.registerFactory<ChatCubit>(
-      () => ChatCubit(inject<ChatRepository>()),
+      () => ChatCubit(
+        inject<ChatRepository>(),
+        attachments: inject<FileAttachmentService>(),
+      ),
     );
     inject.registerFactory<FileExplorerCubit>(
       () => FileExplorerCubit(inject<WorkspaceRepository>()),

@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salvador_cli/salvador_cli.dart';
+import 'package:salvador_desktop/common/services/file_attachment_service.dart';
 import 'package:salvador_desktop/config/error/app_exception.dart';
+import 'package:salvador_desktop/domain/entities/attached_file_entity.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/chat_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/chat_state.dart';
 
@@ -138,6 +140,93 @@ void main() {
         ),
       ],
       verify: (_) => expect(fakeRepository.clearCallCount, 1),
+    );
+  });
+
+  group('ChatCubit.attachments', () {
+    late Directory tempDir;
+
+    setUp(() async {
+      tempDir = await Directory.systemTemp.createTemp('salvador_chat_test_');
+    });
+
+    tearDown(() async {
+      if (tempDir.existsSync()) await tempDir.delete(recursive: true);
+    });
+
+    blocTest<ChatCubit, ChatState>(
+      'addAttachments_whenSamePathTwice_doesNotDuplicate',
+      build: () => ChatCubit(fakeRepository),
+      act: (cubit) {
+        cubit.addAttachments(['/tmp/a.txt']);
+        cubit.addAttachments(['/tmp/a.txt']);
+      },
+      expect: () => [
+        isA<ChatIdle>().having(
+          (s) => s.pendingAttachments,
+          'pendingAttachments',
+          hasLength(1),
+        ),
+      ],
+    );
+
+    blocTest<ChatCubit, ChatState>(
+      'removeAttachment_removesByPath',
+      build: () => ChatCubit(fakeRepository),
+      seed: () => const ChatIdle(
+        pendingAttachments: [
+          AttachedFileEntity(path: '/tmp/a.txt', name: 'a.txt'),
+        ],
+      ),
+      act: (cubit) => cubit.removeAttachment('/tmp/a.txt'),
+      expect: () => [
+        isA<ChatIdle>().having(
+          (s) => s.pendingAttachments,
+          'pendingAttachments',
+          isEmpty,
+        ),
+      ],
+    );
+
+    blocTest<ChatCubit, ChatState>(
+      'send_withValidAttachment_injectsContentAndClearsPending',
+      build: () {
+        final file = File('${tempDir.path}/nota.txt')
+          ..writeAsStringSync('conteudo anexado');
+        return ChatCubit(fakeRepository, attachments: const FileAttachmentService())
+          ..updateReadiness(true)
+          ..addAttachments([file.path]);
+      },
+      act: (cubit) {
+        fakeRepository.reply = const AgentTurnResult(answer: 'resposta');
+        return cubit.send('oi');
+      },
+      verify: (cubit) {
+        expect(fakeRepository.lastMessage, contains('conteudo anexado'));
+        expect(fakeRepository.lastMessage, contains('nota.txt'));
+        final idle = cubit.state as ChatIdle;
+        expect(idle.messages.first.attachedFiles, ['nota.txt']);
+        expect(idle.pendingAttachments, isEmpty);
+      },
+    );
+
+    blocTest<ChatCubit, ChatState>(
+      'send_withInvalidAttachment_addsWarningWithoutBlockingSend',
+      build: () {
+        return ChatCubit(fakeRepository, attachments: const FileAttachmentService())
+          ..updateReadiness(true)
+          ..addAttachments(['${tempDir.path}/inexistente.txt']);
+      },
+      act: (cubit) {
+        fakeRepository.reply = const AgentTurnResult(answer: 'resposta');
+        return cubit.send('oi');
+      },
+      verify: (cubit) {
+        expect(fakeRepository.lastMessage, isNot(contains('arquivo anexado')));
+        final idle = cubit.state as ChatIdle;
+        expect(idle.messages.first.warnings, isNotEmpty);
+        expect(idle.pendingAttachments, isEmpty);
+      },
     );
   });
 }

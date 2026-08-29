@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:salvador_desktop/domain/entities/attached_file_entity.dart';
 import 'package:salvador_desktop/domain/entities/chat_message_entity.dart';
 import 'package:salvador_desktop/domain/entities/persisted_session_summary_entity.dart';
 import 'package:salvador_desktop/domain/entities/tool_activity_entity.dart';
@@ -21,6 +22,7 @@ class ChatIdle extends ChatState {
   const ChatIdle({
     this.messages = const [],
     this.activities = const [],
+    this.pendingAttachments = const [],
     this.sending = false,
     this.sessionFirstPrompt,
     this.sessionStartedAt,
@@ -32,6 +34,7 @@ class ChatIdle extends ChatState {
 
   final List<ChatMessageEntity> messages;
   final List<ToolActivityEntity> activities;
+  final List<AttachedFileEntity> pendingAttachments;
   final bool sending;
   final String? sessionFirstPrompt;
   final DateTime? sessionStartedAt;
@@ -56,6 +59,7 @@ class ChatIdle extends ChatState {
   ChatIdle copyWith({
     List<ChatMessageEntity>? messages,
     List<ToolActivityEntity>? activities,
+    List<AttachedFileEntity>? pendingAttachments,
     bool? sending,
     String? sessionFirstPrompt,
     DateTime? sessionStartedAt,
@@ -66,6 +70,7 @@ class ChatIdle extends ChatState {
     return ChatIdle(
       messages: messages ?? this.messages,
       activities: activities ?? this.activities,
+      pendingAttachments: pendingAttachments ?? this.pendingAttachments,
       sending: sending ?? this.sending,
       sessionFirstPrompt: sessionFirstPrompt ?? this.sessionFirstPrompt,
       sessionStartedAt: sessionStartedAt ?? this.sessionStartedAt,
@@ -77,5 +82,6 @@ class ChatIdle extends ChatState {
   @override
   String toString() =>
       'ChatIdle(messages: ${messages.length}, activities: ${activities.length}, '
-      'sending: $sending, errorKind: $errorKind, error: $error)';
+      'pendingAttachments: ${pendingAttachments.length}, sending: $sending, '
+      'errorKind: $errorKind, error: $error)';
 }

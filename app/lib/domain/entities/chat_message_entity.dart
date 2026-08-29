@@ -10,6 +10,7 @@ class ChatMessageEntity {
     required this.content,
     this.metrics,
     this.mentionedFiles = const [],
+    this.attachedFiles = const [],
     this.warnings = const [],
   });
 
@@ -17,6 +18,7 @@ class ChatMessageEntity {
   final String content;
   final InferenceMetrics? metrics;
   final List<String> mentionedFiles;
+  final List<String> attachedFiles;
   final List<String> warnings;
 
   ChatMessageEntity copyWith({
@@ -24,6 +26,7 @@ class ChatMessageEntity {
     String? content,
     InferenceMetrics? metrics,
     List<String>? mentionedFiles,
+    List<String>? attachedFiles,
     List<String>? warnings,
   }) {
     return ChatMessageEntity(
@@ -31,6 +34,7 @@ class ChatMessageEntity {
       content: content ?? this.content,
       metrics: metrics ?? this.metrics,
       mentionedFiles: mentionedFiles ?? this.mentionedFiles,
+      attachedFiles: attachedFiles ?? this.attachedFiles,
       warnings: warnings ?? this.warnings,
     );
   }
@@ -43,6 +47,7 @@ class ChatMessageEntity {
           content == other.content &&
           metrics == other.metrics &&
           listEquals(mentionedFiles, other.mentionedFiles) &&
+          listEquals(attachedFiles, other.attachedFiles) &&
           listEquals(warnings, other.warnings);
 
   @override
@@ -51,11 +56,13 @@ class ChatMessageEntity {
     content,
     metrics,
     Object.hashAll(mentionedFiles),
+    Object.hashAll(attachedFiles),
     Object.hashAll(warnings),
   );
 
   @override
   String toString() =>
       'ChatMessageEntity(role: $role, content: $content, '
-      'mentionedFiles: $mentionedFiles, warnings: $warnings)';
+      'mentionedFiles: $mentionedFiles, attachedFiles: $attachedFiles, '
+      'warnings: $warnings)';
 }

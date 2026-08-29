@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:salvador_desktop/domain/entities/attached_file_entity.dart';
 import 'package:salvador_desktop/presentation/desktop/theme/desktop_theme.dart';
+import 'package:salvador_desktop/presentation/desktop/widgets/file_chip.dart';
 
 class Composer extends StatelessWidget {
   const Composer({
@@ -8,20 +10,26 @@ class Composer extends StatelessWidget {
     required this.controller,
     required this.focusNode,
     required this.suggestions,
+    required this.pendingAttachments,
     required this.sending,
     required this.ready,
     required this.onSuggestion,
     required this.onMention,
+    required this.onAttach,
+    required this.onRemoveAttachment,
     required this.onSend,
   });
 
   final TextEditingController controller;
   final FocusNode focusNode;
   final List<String> suggestions;
+  final List<AttachedFileEntity> pendingAttachments;
   final bool sending;
   final bool ready;
   final ValueChanged<String> onSuggestion;
   final VoidCallback onMention;
+  final VoidCallback onAttach;
+  final ValueChanged<String> onRemoveAttachment;
   final VoidCallback onSend;
 
   @override
@@ -87,6 +95,23 @@ class Composer extends StatelessWidget {
                         .toList(growable: false),
                   ),
                 ),
+              if (pendingAttachments.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 7),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: pendingAttachments
+                        .map(
+                          (attachment) => FileChip(
+                            label: attachment.name,
+                            showAtPrefix: false,
+                            onRemove: () => onRemoveAttachment(attachment.path),
+                          ),
+                        )
+                        .toList(growable: false),
+                  ),
+                ),
               Container(
                 padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
                 decoration: BoxDecoration(
@@ -142,13 +167,26 @@ class Composer extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       //runSpacing: 8,
                       children: [
-                        TextButton.icon(
-                          onPressed: sending ? null : onMention,
-                          icon: const Icon(
-                            Icons.alternate_email_rounded,
-                            size: 17,
-                          ),
-                          label: const Text('Arquivo'),
+                        Row(
+                          spacing: 4,
+                          children: [
+                            TextButton.icon(
+                              onPressed: sending ? null : onMention,
+                              icon: const Icon(
+                                Icons.alternate_email_rounded,
+                                size: 17,
+                              ),
+                              label: const Text('Arquivo'),
+                            ),
+                            TextButton.icon(
+                              onPressed: sending ? null : onAttach,
+                              icon: const Icon(
+                                Icons.attach_file_rounded,
+                                size: 17,
+                              ),
+                              label: const Text('Anexar'),
+                            ),
+                          ],
                         ),
                         Row(
                           spacing: 10,

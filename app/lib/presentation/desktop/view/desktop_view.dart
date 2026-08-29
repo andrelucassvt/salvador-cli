@@ -1,3 +1,4 @@
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -217,6 +218,12 @@ class _ShellScreenState extends State<_ShellScreen> {
     _promptFocus.requestFocus();
   }
 
+  Future<void> _attachFiles() async {
+    final files = await openFiles();
+    if (files.isEmpty) return;
+    _chatCubit.addAttachments(files.map((f) => f.path).toList());
+  }
+
   void _mentionPreviewed() {
     final value = _promptController.value;
     final cursor = value.selection.isValid
@@ -389,10 +396,13 @@ class _ShellScreenState extends State<_ShellScreen> {
                   controller: _promptController,
                   focusNode: _promptFocus,
                   suggestions: _suggestions,
+                  pendingAttachments: idle.pendingAttachments,
                   sending: idle.sending,
                   ready: ready,
                   onSuggestion: _insertSuggestion,
                   onMention: _startMention,
+                  onAttach: _attachFiles,
+                  onRemoveAttachment: _chatCubit.removeAttachment,
                   onSend: _send,
                 );
               },

@@ -3,7 +3,9 @@ import 'dart:io';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:salvador_cli/salvador_cli.dart';
+import 'package:salvador_desktop/common/services/file_attachment_service.dart';
 import 'package:salvador_desktop/config/error/result_pattern.dart';
+import 'package:salvador_desktop/domain/entities/attached_file_entity.dart';
 import 'package:salvador_desktop/domain/entities/chat_message_entity.dart';
 import 'package:salvador_desktop/domain/entities/persisted_session_summary_entity.dart';
 import 'package:salvador_desktop/domain/entities/tool_activity_entity.dart';
@@ -11,14 +13,49 @@ import 'package:salvador_desktop/domain/interfaces/chat_repository.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/chat_state.dart';
 
 class ChatCubit extends Cubit<ChatState> {
-  ChatCubit(this._repository, {DateTime Function()? clock})
-    : _clock = clock ?? DateTime.now,
-      super(const ChatIdle());
+  ChatCubit(
+    this._repository, {
+    DateTime Function()? clock,
+    FileAttachmentService? attachments,
+  }) : _clock = clock ?? DateTime.now,
+       _attachments = attachments ?? const FileAttachmentService(),
+       super(const ChatIdle());
 
   final ChatRepository _repository;
   final DateTime Function() _clock;
+  final FileAttachmentService _attachments;
   StreamSubscription<ToolActivityEntity>? _activitySubscription;
   bool _ready = false;
+
+  void addAttachments(List<String> paths) {
+    final current = state as ChatIdle;
+    final existing = current.pendingAttachments.map((a) => a.path).toSet();
+    final added = <AttachedFileEntity>[
+      for (final path in paths)
+        if (existing.add(path))
+          AttachedFileEntity(
+            path: path,
+            name: File(path).uri.pathSegments.last,
+          ),
+    ];
+    if (added.isEmpty) return;
+    emit(
+      current.copyWith(
+        pendingAttachments: [...current.pendingAttachments, ...added],
+      ),
+    );
+  }
+
+  void removeAttachment(String path) {
+    final current = state as ChatIdle;
+    emit(
+      current.copyWith(
+        pendingAttachments: current.pendingAttachments
+            .where((a) => a.path != path)
+            .toList(growable: false),
+      ),
+    );
+  }
 
   /// Chamado pela View a cada mudanca de `WorkspaceState` (conectado +
   /// modelo em execucao).
@@ -52,11 +89,37 @@ class ChatCubit extends Cubit<ChatState> {
       return;
     }
 
+    final attachedNames = <String>[];
+    final attachmentWarnings = <String>[];
+    final attachmentBlocks = StringBuffer();
+    for (final attachment in current.pendingAttachments) {
+      switch (_attachments.readContent(attachment.path)) {
+        case AttachmentContent(:final content):
+          attachedNames.add(attachment.name);
+          attachmentBlocks
+            ..writeln()
+            ..writeln('--- arquivo anexado: ${attachment.name} ---')
+            ..writeln(content)
+            ..writeln('--- fim do arquivo: ${attachment.name} ---');
+        case AttachmentRejected(:final reason):
+          attachmentWarnings.add('${attachment.name} ignorado: $reason.');
+      }
+    }
+    final outgoing = attachmentBlocks.isEmpty
+        ? normalized
+        : '$normalized\n$attachmentBlocks';
+
     final withUserMessage = current.copyWith(
       messages: [
         ...current.messages,
-        ChatMessageEntity(role: ChatRole.user, content: normalized),
+        ChatMessageEntity(
+          role: ChatRole.user,
+          content: normalized,
+          attachedFiles: attachedNames,
+          warnings: attachmentWarnings,
+        ),
       ],
+      pendingAttachments: const [],
       sending: true,
       sessionFirstPrompt: current.sessionFirstPrompt ?? normalized,
       sessionStartedAt: current.sessionStartedAt ?? _clock(),
@@ -64,7 +127,7 @@ class ChatCubit extends Cubit<ChatState> {
     );
     emit(withUserMessage);
 
-    final result = await _repository.send(normalized);
+    final result = await _repository.send(outgoing);
     switch (result) {
       case Error(:final error):
         emit(

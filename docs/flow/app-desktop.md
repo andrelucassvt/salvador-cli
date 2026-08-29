@@ -2,9 +2,9 @@
 generated_at: 2026-08-28
 source_commit: ae9aaaa
 source_state: dirty
-verified_at: 2026-08-28
+verified_at: 2026-08-29
 status: current
-related_plans: ['docs/plan/salvador-desktop-clean-architecture/00-indice.md']
+related_plans: ['docs/plan/salvador-desktop-clean-architecture/00-indice.md', 'docs/plan/attach-files-desktop.md']
 ---
 
 # Flow: App Desktop do Salvador
@@ -50,7 +50,7 @@ O shell tem quatro regiões: title bar customizada de 38 px no macOS, top bar de
    Modal que cria um `SettingsCubit` (via `registerFactoryParam`) com os valores atuais do `WorkspaceState`; os campos de texto livre (host/contexto) usam `TextEditingController`s locais no `_SettingsDialogBodyState`, não reconstruídos a cada emissão do Cubit. "Testar" chama `SettingsCubit.testHost` (sonda via `OllamaRepository`, sem mutar `WorkspaceState`). "Salvar e reconectar" chama `SettingsCubit.save`, cujo `onSave` callback delega a `WorkspaceCubit.saveSettings` — que valida o host e, se mudou, sonda o novo servidor antes de comitar qualquer valor. Permissões (editar/executar) viram `AgentPermissions` repassadas ao `ChatCubit.attachSession` pelo `MultiBlocListener`; acesso à rede fica desligado/indisponível com a explicação do shell sem sandbox.
 
 8. **Envio ao agente** — `presentation/desktop/view/desktop_view.dart` → `_ShellScreenState._send` + `presentation/desktop/view_model/chat_cubit.dart` → `ChatCubit.send`
-   Antes de chamar o agente, `_send` verifica o `WorkspaceState`: se o modelo selecionado estiver parado (e conectado), aguarda `WorkspaceCubit.startModel`; se a carga falhar, o texto digitado permanece no composer e o banner de erro mostra o motivo. Só então chama `ChatCubit.send`, que exige `_ready == true` (mantido por `updateReadiness`, ver passo 5); registra o primeiro prompt/data da sessão atual, adiciona a mensagem do usuário e chama `ChatRepository.send` (que delega a `AgentSession.sendDetailed` via `data/datasources/chat_agent_datasource.dart`). Tool calls concluídas chegam por um `Stream<ToolActivityEntity>` (adaptado do callback `onToolResult` da `AgentSession`) e viram `ToolActivityEntity` na lista de atividades.
+   Antes de chamar o agente, `_send` verifica o `WorkspaceState`: se o modelo selecionado estiver parado (e conectado), aguarda `WorkspaceCubit.startModel`; se a carga falhar, o texto digitado permanece no composer e o banner de erro mostra o motivo. Só então chama `ChatCubit.send`, que exige `_ready == true` (mantido por `updateReadiness`, ver passo 5). Antes de montar a mensagem do usuário, `send` lê cada `pendingAttachments` (arquivos escolhidos via `_attachFiles` → `openFiles()` do `file_selector`, sem confinamento de raiz — ao contrário da menção `@`) através de `FileAttachmentService.readContent` (`common/services/`): conteúdo válido vira bloco `--- arquivo anexado: X ---` concatenado ao texto enviado a `ChatRepository.send` e o nome entra em `ChatMessageEntity.attachedFiles`; rejeição (arquivo inexistente/binário/UTF-8 inválido/acima de 512 KiB) vira aviso em `warnings` da própria mensagem do usuário, sem bloquear o envio. `pendingAttachments` é limpo ao emitir a mensagem. Em seguida registra o primeiro prompt/data da sessão atual, adiciona a mensagem do usuário e chama `ChatRepository.send` (que delega a `AgentSession.sendDetailed` via `data/datasources/chat_agent_datasource.dart`). Tool calls concluídas chegam por um `Stream<ToolActivityEntity>` (adaptado do callback `onToolResult` da `AgentSession`) e viram `ToolActivityEntity` na lista de atividades.
 
 9. **Atividade e sessões** — `presentation/desktop/widgets/activity_panel.dart`
    Painel escuro de 286 px lista atividades (do `ChatState.activities`) com selo/cor por ferramenta e timestamps relativos, e sessões (`WorkspaceState.sessions` + `ChatState.currentSessionSummary` para a sessão em andamento). "Nova sessão" chama `ChatCubit.newSession(onSessionEnded: ...)`, que calcula o resumo (título do primeiro prompt, data, contagem de atividades) e invoca o callback ligado a `WorkspaceCubit.recordSession`, que persiste antes de a sessão ser limpa.
@@ -75,12 +75,13 @@ O shell tem quatro regiões: title bar customizada de 38 px no macOS, top bar de
 | Bootstrap | `app/lib/main.dart` | Inicialização do binding, `AppInjector.setupDependencies()` e do `window_manager` no macOS |
 | DI | `app/lib/config/inject/app_injector.dart` | Registro de services, datasources, repositories e cubits no GetIt |
 | Erros | `app/lib/config/error/{result_pattern,app_exception}.dart` | `Result<T>` (Ok/Error) e hierarquia `AppException` do app |
-| Domínio | `app/lib/domain/entities/*.dart` | Entidades imutáveis (ChatMessage, ToolActivity, WorkspaceTreeEntry, FilePreview, PersistedSessionSummary, DesktopPreferences, HostTestResult) |
+| Domínio | `app/lib/domain/entities/*.dart` | Entidades imutáveis (ChatMessage, ToolActivity, WorkspaceTreeEntry, FilePreview, PersistedSessionSummary, DesktopPreferences, HostTestResult, AttachedFile) |
 | Domínio | `app/lib/domain/interfaces/{ollama,chat,workspace}_repository.dart` | Contratos de Repository |
 | Dados | `app/lib/data/datasources/*.dart` | `OllamaRemoteDataSource`, `ChatAgentDataSource` (encapsula `AgentSession`, stateful), `WorkspaceDataSource` (árvore + `ToolRegistry`/`FileMentionService`) |
 | Dados | `app/lib/data/repositories/*_repository_impl.dart` | Classificam falhas em `AppException`, convertem para `Result<T>` |
 | Serviços | `app/lib/common/services/desktop_storage_service.dart` | JSON versionado no diretório de dados do SO, leitura defensiva e gravação atômica |
 | Serviços | `app/lib/common/services/system_memory_service.dart` | RAM disponível por plataforma (`vm_stat`+`sysctl`, `/proc/meminfo`, CIM) para o menu de modelos |
+| Serviços | `app/lib/common/services/file_attachment_service.dart` | Lê e valida (tamanho/binário/UTF-8) um anexo escolhido via `file_selector`, sem confinamento de raiz |
 | Estado | `app/lib/presentation/desktop/view_model/workspace_{cubit,state}.dart` | Conexão, modelo, pasta, configurações, sessões persistidas |
 | Estado | `app/lib/presentation/desktop/view_model/chat_{cubit,state}.dart` | Mensagens, atividades, envio, sessão em andamento |
 | Estado | `app/lib/presentation/desktop/view_model/file_explorer_{cubit,state}.dart` | Árvore, filtro, preview, menções |
@@ -88,7 +89,7 @@ O shell tem quatro regiões: title bar customizada de 38 px no macOS, top bar de
 | Apresentação | `app/lib/presentation/desktop/view/desktop_view.dart` | `DesktopView` (MaterialApp + tema) e shell `_ShellScreenState` (resolve Cubits, `MultiBlocListener`, composer, scroll, `/exit` e `/quit`) |
 | Apresentação | `app/lib/presentation/desktop/theme/desktop_theme.dart` | Paleta (navy/ocean/coral/shell/paper/…) e dimensões do shell (title bar, top bar, rails, painéis) |
 | Apresentação | `app/lib/presentation/desktop/content/{workspace_top_bar,settings_dialog,composer}.dart` | Blocos únicos da View (top bar, diálogo de configurações, composer) |
-| Apresentação | `app/lib/presentation/desktop/widgets/*.dart` | Componentes reutilizados (menus, botões, painel/rail de atividade, painel/rail de arquivos, preview, cartões de chat, highlighter) |
+| Apresentação | `app/lib/presentation/desktop/widgets/*.dart` | Componentes reutilizados (menus, botões, painel/rail de atividade, painel/rail de arquivos, preview, cartões de chat, highlighter, `FileChip` de menção/anexo) |
 | Utilitários | `app/lib/common/utils/formatters.dart` | `formatBytes`/`relativeTime`/`formatSessionDate` |
 | Agente (pacote) | `lib/src/agent.dart` | `AgentSession` com `AgentPermissions` e observador `onToolResult` |
 | Cliente Ollama (pacote) | `lib/src/ollama_client.dart` | `/api/chat`, `/api/tags`, `/api/ps`, `/api/show`, `/api/generate` (load/unload) e `/api/version` |
@@ -115,7 +116,7 @@ O shell tem quatro regiões: title bar customizada de 38 px no macOS, top bar de
 ## Dependências Externas
 
 - Servidor Ollama em `http://127.0.0.1:11434` (configurável), endpoints `/api/chat`, `/api/tags`, `/api/ps`, `/api/show`, `/api/generate`, `/api/version`.
-- `file_selector` (picker nativo de pasta) e `window_manager` (title bar oculta no macOS), exclusivos de `app/pubspec.yaml`.
+- `file_selector` (picker nativo de pasta via `getDirectoryPath` e de arquivos para anexo via `openFiles`) e `window_manager` (title bar oculta no macOS), exclusivos de `app/pubspec.yaml`.
 - `flutter_bloc`/`get_it` (state management + DI) e `bloc_test`/`mocktail`/`checks` (dev, testes), adicionados nesta migração.
 - Fontes Archivo e JetBrains Mono empacotadas como assets em `app/assets/fonts/`.
 

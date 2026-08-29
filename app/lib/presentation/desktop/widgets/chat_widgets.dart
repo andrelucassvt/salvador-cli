@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:salvador_cli/salvador_cli.dart';
 import 'package:salvador_desktop/domain/entities/chat_message_entity.dart';
 import 'package:salvador_desktop/presentation/desktop/theme/desktop_theme.dart';
+import 'package:salvador_desktop/presentation/desktop/widgets/file_chip.dart';
 
 class EmptyState extends StatelessWidget {
   const EmptyState({
@@ -144,7 +145,17 @@ class MessageCard extends StatelessWidget {
                 spacing: 6,
                 runSpacing: 6,
                 children: entry.mentionedFiles
-                    .map((path) => _FileChip(path: path))
+                    .map((path) => FileChip(label: path))
+                    .toList(growable: false),
+              ),
+            ],
+            if (entry.attachedFiles.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: entry.attachedFiles
+                    .map((name) => FileChip(label: name, showAtPrefix: false))
                     .toList(growable: false),
               ),
             ],
@@ -309,27 +320,3 @@ class _PromptCard extends StatelessWidget {
   }
 }
 
-class _FileChip extends StatelessWidget {
-  const _FileChip({required this.path});
-
-  final String path;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE7F2F3),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        '@$path',
-        style: const TextStyle(
-          color: ocean,
-          fontSize: 10,
-          fontFamily: 'JetBrains Mono',
-        ),
-      ),
-    );
-  }
-}
