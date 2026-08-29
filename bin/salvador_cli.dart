@@ -127,6 +127,19 @@ Future<void> _chat(
     client: OllamaClient(model: model, baseUrl: config.host),
     root: config.root,
     contextFiles: contextFiles,
+    gitClient: GitClient(),
+    gitProfile: const GitProfile(replacesRunCommand: false),
+    onGitConfirm: (proposal) async {
+      try {
+        final response = await terminal.readLine(
+          prompt: 'Operacao ${proposal.summary}. Confirmar? [s/N]: ',
+        );
+        final normalized = response?.trim().toLowerCase();
+        return normalized == 's' || normalized == 'sim';
+      } on TerminalInputInterrupted {
+        return false;
+      }
+    },
     onToolCall: (call) => stdout.writeln('  > ${call.name}'),
   );
   final mentions = FileMentionService(config.root);

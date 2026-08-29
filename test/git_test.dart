@@ -592,10 +592,13 @@ void main() {
   });
 
   group('GitActionProposal', () {
-    test('enum nao representa reset hard, clean, delete, push ou force', () {
+    test('enum representa todas as operacoes Git tipadas', () {
       final names = GitActionType.values.map((type) => type.name).toList();
       expect(names, [
         'fetch',
+        'pull',
+        'push',
+        'pushForce',
         'createBranch',
         'checkoutBranch',
         'stage',
@@ -603,11 +606,60 @@ void main() {
         'commit',
         'merge',
         'rebase',
+        'resetSoft',
+        'resetMixed',
+        'resetHard',
+        'cleanForce',
+        'restoreFile',
+        'removeFile',
+        'moveFile',
+        'deleteBranch',
+        'deleteBranchForce',
+        'createTag',
+        'deleteTag',
+        'stashPush',
+        'stashPop',
+        'stashApply',
+        'stashDrop',
+        'cherryPick',
+        'revert',
+        'amendCommit',
+        'mergeAbort',
+        'rebaseAbort',
+        'rebaseContinue',
+        'remoteAdd',
+        'remoteRemove',
       ]);
-      expect(
-        names.join(' ').toLowerCase(),
-        isNot(contains(RegExp(r'reset|clean|delete|push|force'))),
-      );
+      expect(names, hasLength(34));
+    });
+
+    test('classifica 12 operacoes riscosas e repassa o risco', () {
+      const risky = {
+        GitActionType.fetch,
+        GitActionType.pull,
+        GitActionType.push,
+        GitActionType.pushForce,
+        GitActionType.resetHard,
+        GitActionType.cleanForce,
+        GitActionType.restoreFile,
+        GitActionType.removeFile,
+        GitActionType.deleteBranchForce,
+        GitActionType.deleteTag,
+        GitActionType.stashDrop,
+        GitActionType.amendCommit,
+      };
+      for (final type in GitActionType.values) {
+        expect(
+          type.risk,
+          risky.contains(type) ? GitActionRisk.risky : GitActionRisk.normal,
+          reason: type.name,
+        );
+        expect(
+          GitActionProposal(type: type).risk,
+          type.risk,
+          reason: type.name,
+        );
+      }
     });
 
     test('resumo descreve o tipo e a selecao', () {
@@ -640,6 +692,142 @@ void main() {
   });
 
   group('GitActionExecutor', () {
+    test('operacoes de rede usam argumentos fixos sem shell', () async {
+      final seen = <List<String>>[];
+      runner.script = (arguments) {
+        seen.add(arguments);
+        return _processResult('');
+      };
+      final executor = GitActionExecutor(processRunner: runner.call);
+
+      await executor.execute(
+        const GitActionProposal(type: GitActionType.push, refName: 'origin'),
+        root,
+      );
+      await executor.execute(
+        const GitActionProposal(type: GitActionType.pushForce),
+        root,
+      );
+      await executor.execute(
+        const GitActionProposal(type: GitActionType.pull),
+        root,
+      );
+      await executor.execute(
+        const GitActionProposal(type: GitActionType.fetch),
+        root,
+      );
+
+      expect(seen, [
+        ['git', '-C', root.path, 'push', 'origin'],
+        ['git', '-C', root.path, 'push', '--force'],
+        ['git', '-C', root.path, 'pull'],
+        ['git', '-C', root.path, 'fetch'],
+      ]);
+    });
+
+    test('operacoes riscosas usam argumentos fixos sem shell', () async {
+      final seen = <List<String>>[];
+      runner.script = (arguments) {
+        seen.add(arguments);
+        return _processResult('');
+      };
+      final executor = GitActionExecutor(processRunner: runner.call);
+
+      final actions = const [
+        GitActionProposal(type: GitActionType.resetHard, refName: 'HEAD~1'),
+        GitActionProposal(type: GitActionType.cleanForce),
+        GitActionProposal(type: GitActionType.restoreFile, paths: ['a.txt']),
+        GitActionProposal(type: GitActionType.removeFile, paths: ['a.txt']),
+        GitActionProposal(
+          type: GitActionType.deleteBranchForce,
+          refName: 'feature/x',
+        ),
+        GitActionProposal(type: GitActionType.deleteTag, refName: 'v1.0.0'),
+        GitActionProposal(type: GitActionType.stashDrop),
+        GitActionProposal(
+          type: GitActionType.amendCommit,
+          message: 'corrige mensagem',
+        ),
+      ];
+      for (final action in actions) {
+        await executor.execute(action, root);
+      }
+
+      expect(seen, [
+        ['git', '-C', root.path, 'reset', '--hard', 'HEAD~1'],
+        ['git', '-C', root.path, 'clean', '-fd'],
+        ['git', '-C', root.path, 'restore', 'a.txt'],
+        ['git', '-C', root.path, 'rm', 'a.txt'],
+        ['git', '-C', root.path, 'branch', '-D', 'feature/x'],
+        ['git', '-C', root.path, 'tag', '-d', 'v1.0.0'],
+        ['git', '-C', root.path, 'stash', 'drop'],
+        ['git', '-C', root.path, 'commit', '--amend', '-m', 'corrige mensagem'],
+      ]);
+    });
+
+    test('demais operacoes usam argumentos fixos sem shell', () async {
+      final seen = <List<String>>[];
+      runner.script = (arguments) {
+        seen.add(arguments);
+        return _processResult('');
+      };
+      final executor = GitActionExecutor(processRunner: runner.call);
+
+      final actions = const [
+        GitActionProposal(type: GitActionType.resetSoft, refName: 'HEAD^'),
+        GitActionProposal(type: GitActionType.resetMixed),
+        GitActionProposal(
+          type: GitActionType.moveFile,
+          paths: ['old.txt', 'new.txt'],
+        ),
+        GitActionProposal(type: GitActionType.deleteBranch, refName: 'feature'),
+        GitActionProposal(type: GitActionType.createTag, refName: 'v1.0.0'),
+        GitActionProposal(type: GitActionType.stashPush, message: 'wip'),
+        GitActionProposal(type: GitActionType.stashPop),
+        GitActionProposal(type: GitActionType.stashApply),
+        GitActionProposal(type: GitActionType.cherryPick, refName: 'a1b2c3d'),
+        GitActionProposal(type: GitActionType.revert, refName: 'a1b2c3d'),
+        GitActionProposal(type: GitActionType.mergeAbort),
+        GitActionProposal(type: GitActionType.rebaseAbort),
+        GitActionProposal(type: GitActionType.rebaseContinue),
+        GitActionProposal(
+          type: GitActionType.remoteAdd,
+          refName: 'origin',
+          message: 'https://example.com/repo.git',
+        ),
+        GitActionProposal(type: GitActionType.remoteRemove, refName: 'origin'),
+      ];
+      for (final action in actions) {
+        await executor.execute(action, root);
+      }
+
+      expect(seen, [
+        ['git', '-C', root.path, 'reset', '--soft', 'HEAD^'],
+        ['git', '-C', root.path, 'reset'],
+        ['git', '-C', root.path, 'mv', 'old.txt', 'new.txt'],
+        ['git', '-C', root.path, 'branch', '-d', 'feature'],
+        ['git', '-C', root.path, 'tag', 'v1.0.0'],
+        ['git', '-C', root.path, 'stash', 'push', '-m', 'wip'],
+        ['git', '-C', root.path, 'stash', 'pop'],
+        ['git', '-C', root.path, 'stash', 'apply'],
+        ['git', '-C', root.path, 'cherry-pick', 'a1b2c3d'],
+        ['git', '-C', root.path, 'revert', '--no-edit', 'a1b2c3d'],
+        ['git', '-C', root.path, 'merge', '--abort'],
+        ['git', '-C', root.path, 'rebase', '--abort'],
+        ['git', '-C', root.path, 'rebase', '--continue'],
+        [
+          'git',
+          '-C',
+          root.path,
+          'remote',
+          'add',
+          'origin',
+          'https://example.com/repo.git',
+        ],
+        ['git', '-C', root.path, 'remote', 'remove', 'origin'],
+      ]);
+    });
+
     test('fetch usa argumentos fixos sem shell', () async {
       runner.script = (arguments) {
         expect(arguments, ['git', '-C', root.path, 'fetch']);
@@ -779,8 +967,20 @@ void main() {
       },
     );
 
-    test('rejeita ref com opcao, .. ou @{', () async {
+    test('aceita refs Git comuns e rejeita refs inseguras', () async {
       final executor = GitActionExecutor(processRunner: runner.call);
+      for (final ref in [
+        'HEAD~1',
+        'HEAD^',
+        'a1b2c3d',
+        'a1b2c3d4e5f6789012345678901234567890abcd',
+        'v1.0.0',
+      ]) {
+        executor.validate(
+          GitActionProposal(type: GitActionType.checkoutBranch, refName: ref),
+          root,
+        );
+      }
       for (final ref in ['--hard', 'a..b', 'feature@{1}', '-x', 'com espaco']) {
         await expectLater(
           executor.execute(

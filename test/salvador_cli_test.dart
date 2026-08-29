@@ -290,7 +290,132 @@ void main() {
   );
 
   group('perfil Git da sessao', () {
-    test('expoe consultas e propostas sem run_command', () async {
+    test(
+      'GitActionTool executa tipo normal pelo runner e devolve a saida',
+      () async {
+        final calls = <List<String>>[];
+        final tool = GitActionTool(
+          root,
+          executor: GitActionExecutor(
+            processRunner: (executable, arguments) async {
+              calls.add([executable, ...arguments]);
+              return ProcessResult(0, 0, 'feito', '');
+            },
+          ),
+        );
+
+        final result = await tool.execute({
+          'type': 'commit',
+          'message': 'corrige o parser',
+        });
+
+        expect(result, 'feito');
+        expect(calls, [
+          [
+            'git',
+            '-C',
+            root.resolveSymbolicLinksSync(),
+            'commit',
+            '-m',
+            'corrige o parser',
+          ],
+        ]);
+      },
+    );
+
+    test('tipo risco confirmado executa e recusado nao chama runner', () async {
+      final calls = <List<String>>[];
+      final executor = GitActionExecutor(
+        processRunner: (executable, arguments) async {
+          calls.add([executable, ...arguments]);
+          return ProcessResult(0, 0, '', '');
+        },
+      );
+      final confirmed = GitActionTool(
+        root,
+        executor: executor,
+        onGitConfirm: (_) async => true,
+      );
+      final rejected = ToolRegistry(
+        root,
+        gitClient: GitClient(),
+        gitProfile: const GitProfile(),
+        onGitConfirm: (_) async => false,
+        gitActionExecutor: executor,
+      );
+
+      expect(await confirmed.execute({'type': 'cleanForce'}), contains('OK:'));
+      expect(
+        await rejected.execute(
+          ToolCall(name: 'git', arguments: {'type': 'cleanForce'}),
+        ),
+        'ERRO: operacao cancelada pelo usuario',
+      );
+      expect(calls, [
+        ['git', '-C', root.resolveSymbolicLinksSync(), 'clean', '-fd'],
+      ]);
+    });
+
+    test('tipo risco sem confirmacao registra proposta sem executar', () async {
+      final calls = <List<String>>[];
+      final proposals = <GitActionProposal>[];
+      final tool = GitActionTool(
+        root,
+        executor: GitActionExecutor(
+          processRunner: (executable, arguments) async {
+            calls.add([executable, ...arguments]);
+            return ProcessResult(0, 0, '', '');
+          },
+        ),
+        onProposal: proposals.add,
+      );
+
+      final result = await tool.execute({'type': 'fetch'});
+
+      expect(result, contains('Aguardando aprovacao na interface.'));
+      expect(proposals, [const GitActionProposal(type: GitActionType.fetch)]);
+      expect(calls, isEmpty);
+    });
+
+    test(
+      'tipo risco sem via de confirmacao retorna erro sem executar',
+      () async {
+        final registry = ToolRegistry(
+          root,
+          gitClient: GitClient(
+            processRunner: (executable, arguments) async {
+              return ProcessResult(0, 0, '', '');
+            },
+          ),
+          gitProfile: const GitProfile(),
+        );
+
+        expect(
+          await registry.execute(
+            ToolCall(name: 'git', arguments: {'type': 'fetch'}),
+          ),
+          'ERRO: operacao destrutiva requer aprovacao',
+        );
+      },
+    );
+
+    test('tipo normal nunca gera proposta', () async {
+      final proposals = <GitActionProposal>[];
+      final tool = GitActionTool(
+        root,
+        executor: GitActionExecutor(
+          processRunner: (executable, arguments) async =>
+              ProcessResult(0, 0, '', ''),
+        ),
+        onProposal: proposals.add,
+      );
+
+      await tool.execute({'type': 'commit', 'message': 'mensagem'});
+
+      expect(proposals, isEmpty);
+    });
+
+    test('expoe consultas e git sem run_command no perfil padrao', () async {
       final client = FakeChatClient([
         AgentMessage(role: 'assistant', content: 'ok'),
       ]);
@@ -314,7 +439,7 @@ void main() {
       expect(names, contains('git_log'));
       expect(names, contains('git_diff'));
       expect(names, contains('git_show'));
-      expect(names, contains('propose_git_action'));
+      expect(names, contains('git'));
       expect(
         names,
         isNot(contains('run_command')),
@@ -322,54 +447,81 @@ void main() {
       );
     });
 
-    test('propose_git_action acumula proposta sem invocar o runner', () async {
-      final runnerCalls = <List<String>>[];
-      final client = FakeChatClient([
-        AgentMessage(
-          role: 'assistant',
-          toolCalls: [
-            ToolCall(
-              name: 'propose_git_action',
-              arguments: {
-                'type': 'commit',
-                'message': 'corrige o parser de status',
-              },
-            ),
-          ],
-        ),
-        AgentMessage(role: 'assistant', content: 'proposta registrada'),
-      ]);
-      final proposals = <GitActionProposal>[];
-      final session = AgentSession(
-        client: client,
-        root: root,
-        gitClient: GitClient(
-          processRunner: (executable, arguments) async {
-            runnerCalls.add(arguments);
-            return ProcessResult(0, 0, '', '');
-          },
-        ),
-        gitProfile: const GitProfile(),
-        onProposal: proposals.add,
-      );
+    test(
+      'GitProfile controla run_command e exige cliente e perfil para git',
+      () {
+        final withoutGit = ToolRegistry(root);
+        final withoutProfile = ToolRegistry(root, gitClient: GitClient());
+        final withShell = ToolRegistry(
+          root,
+          gitClient: GitClient(),
+          gitProfile: const GitProfile(replacesRunCommand: false),
+        );
 
-      final result = await session.sendDetailed('faça um commit');
+        expect(
+          withoutGit.definitions.map((definition) => definition.name),
+          isNot(contains('git')),
+        );
+        expect(
+          withoutProfile.definitions.map((definition) => definition.name),
+          isNot(contains('git')),
+        );
+        expect(
+          withShell.definitions.map((definition) => definition.name),
+          containsAll(['git', 'run_command']),
+        );
+      },
+    );
 
-      expect(result.proposals, hasLength(1));
-      final proposal = result.proposals.single;
-      expect(proposal.type, GitActionType.commit);
-      expect(proposal.message, 'corrige o parser de status');
-      expect(proposals, hasLength(1));
-      expect(
-        runnerCalls,
-        isEmpty,
-        reason: 'nenhum processo git pode rodar por causa de uma proposta',
-      );
-      final toolMessage = client.requests.last
-          .where((message) => message.role == 'tool')
-          .single;
-      expect(toolMessage.content, contains('aprovacao'));
-    });
+    test(
+      'AgentSession repassa confirmacao e executa risco sem proposta',
+      () async {
+        final runnerCalls = <List<String>>[];
+        final client = FakeChatClient([
+          AgentMessage(
+            role: 'assistant',
+            toolCalls: [
+              ToolCall(name: 'git', arguments: {'type': 'cleanForce'}),
+            ],
+          ),
+          AgentMessage(role: 'assistant', content: 'proposta registrada'),
+        ]);
+        final proposals = <GitActionProposal>[];
+        final session = AgentSession(
+          client: client,
+          root: root,
+          gitClient: GitClient(
+            processRunner: (executable, arguments) async {
+              runnerCalls.add(arguments);
+              return ProcessResult(0, 0, '', '');
+            },
+          ),
+          gitProfile: const GitProfile(),
+          gitActionExecutor: GitActionExecutor(
+            processRunner: (executable, arguments) async {
+              runnerCalls.add([executable, ...arguments]);
+              return ProcessResult(0, 0, '', '');
+            },
+          ),
+          onGitConfirm: (_) async => true,
+          onProposal: proposals.add,
+        );
+
+        final result = await session.sendDetailed(
+          'limpe arquivos nao rastreados',
+        );
+
+        expect(result.proposals, isEmpty);
+        expect(proposals, isEmpty);
+        expect(runnerCalls, [
+          ['git', '-C', root.resolveSymbolicLinksSync(), 'clean', '-fd'],
+        ]);
+        final toolMessage = client.requests.last
+            .where((message) => message.role == 'tool')
+            .single;
+        expect(toolMessage.content, contains('OK:'));
+      },
+    );
 
     test(
       'perfil Git respeita allowEdit para escrita durante conflitos',

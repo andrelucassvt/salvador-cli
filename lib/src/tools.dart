@@ -12,6 +12,9 @@ abstract interface class AgentTool {
   Future<String> execute(Map<String, Object?> arguments);
 }
 
+typedef GitActionConfirmation =
+    FutureOr<bool> Function(GitActionProposal proposal);
+
 /// Controla quais ferramentas sao expostas ao modelo e aceitas na execucao.
 /// A leitura de arquivos esta sempre disponivel; edicao e comandos podem ser
 /// removidos. [readOnly] cobre os consumidores que so podem ler.
@@ -33,14 +36,19 @@ class AgentPermissions {
   };
 }
 
-/// Perfil Git opcional de uma sessao: consultas estruturadas e propostas de
-/// acao no lugar de `run_command`. Quando ativo, comandos de shell nunca sao
-/// expostos, mesmo que as permissoes normais permitam.
+/// Perfil Git opcional de uma sessao: consultas estruturadas e a ferramenta
+/// tipada `git`. Por padrao substitui `run_command`, mas o chat principal e a
+/// CLI podem manter o shell com [replacesRunCommand] falso.
 class GitProfile {
-  const GitProfile({this.queriesEnabled = true, this.proposalsEnabled = true});
+  const GitProfile({
+    this.queriesEnabled = true,
+    this.proposalsEnabled = true,
+    this.replacesRunCommand = true,
+  });
 
   final bool queriesEnabled;
   final bool proposalsEnabled;
+  final bool replacesRunCommand;
 }
 
 class ToolRegistry {
@@ -51,6 +59,8 @@ class ToolRegistry {
     GitClient? gitClient,
     GitProfile? gitProfile,
     void Function(GitActionProposal)? onProposal,
+    GitActionConfirmation? onGitConfirm,
+    GitActionExecutor? gitActionExecutor,
   }) : _permissions = permissions,
        _tools = root == null
            ? const []
@@ -59,7 +69,8 @@ class ToolRegistry {
                if (contextFiles != null) UseSkillTool(root, contextFiles),
                if (permissions.allowEdit) WriteFileTool(root),
                if (permissions.allowEdit) ReplaceInFileTool(root),
-               if (gitProfile == null && permissions.allowCommands)
+               if (permissions.allowCommands &&
+                   (gitProfile == null || !gitProfile.replacesRunCommand))
                  RunCommandTool(root),
                if (gitClient != null && gitProfile != null) ...[
                  if (gitProfile.queriesEnabled) ...[
@@ -69,7 +80,12 @@ class ToolRegistry {
                    GitShowTool(root, gitClient),
                  ],
                  if (gitProfile.proposalsEnabled)
-                   ProposeGitActionTool(root, onProposal),
+                   GitActionTool(
+                     root,
+                     onProposal: onProposal,
+                     onGitConfirm: onGitConfirm,
+                     executor: gitActionExecutor,
+                   ),
                ],
              ];
 
@@ -516,53 +532,49 @@ class GitShowTool extends GitQueryTool {
   }
 }
 
-/// Propoe uma mutacao Git sem executar nada: acumula [GitActionProposal] para
-/// a interface aprovar.
-class ProposeGitActionTool extends WorkspaceTool {
-  ProposeGitActionTool(super.root, this.onProposal);
+/// Executa operacoes Git normais e somente registra as riscosas para revisao
+/// quando nao ha um callback de confirmacao no frontend.
+class GitActionTool extends WorkspaceTool {
+  GitActionTool(
+    super.root, {
+    this.onProposal,
+    this.onGitConfirm,
+    GitActionExecutor? executor,
+  }) : _executor = executor ?? GitActionExecutor();
 
   final void Function(GitActionProposal)? onProposal;
-  final GitActionExecutor _validator = GitActionExecutor();
+  final GitActionConfirmation? onGitConfirm;
+  final GitActionExecutor _executor;
 
   @override
-  ToolDefinition get definition => const ToolDefinition(
-    name: 'propose_git_action',
-    description:
-        'Propoe uma mutacao Git (fetch, criar/trocar branch, stage, '
-        'unstage, commit, merge, rebase) para aprovacao na interface. '
-        'Nenhuma acao executa sem confirmacao.',
-    properties: {
-      'type': {
-        'type': 'string',
-        'description':
-            'Tipo: fetch, createBranch, checkoutBranch, stage, '
-            'unstage, commit, merge ou rebase',
+  ToolDefinition get definition {
+    final types = GitActionType.values.map((type) => type.name).join(', ');
+    return ToolDefinition(
+      name: 'git',
+      description:
+          'Executa uma operacao Git tipada. Tipos validos: $types. '
+          'Operacoes riscosas exigem confirmacao.',
+      properties: const {
+        'type': {'type': 'string', 'description': 'Tipo da operacao Git'},
+        'ref': {'type': 'string', 'description': 'Ref, branch, tag ou remoto'},
+        'paths': {
+          'type': 'array',
+          'items': {'type': 'string'},
+          'description': 'Caminhos relativos para arquivos',
+        },
+        'message': {
+          'type': 'string',
+          'description': 'Mensagem de commit, stash ou URL do remoto',
+        },
       },
-      'ref': {
-        'type': 'string',
-        'description': 'Branch alvo (create/checkout/merge/rebase)',
-      },
-      'paths': {
-        'type': 'array',
-        'items': {'type': 'string'},
-        'description': 'Caminhos relativos (stage/unstage)',
-      },
-      'message': {'type': 'string', 'description': 'Mensagem do commit'},
-    },
-    required: ['type'],
-  );
+      required: const ['type'],
+    );
+  }
 
   @override
   Future<String> execute(Map<String, Object?> arguments) async {
     final typeName = requiredString(arguments, 'type');
-    GitActionType? type;
-    for (final candidate in GitActionType.values) {
-      if (candidate.name == typeName) type = candidate;
-    }
-    if (type == null) {
-      throw ToolException('tipo de acao invalido: $typeName');
-    }
-
+    final type = _typeFor(typeName);
     final rawRef = arguments['ref'];
     if (rawRef != null && rawRef is! String) {
       throw const ToolException('argumento "ref" deve ser uma string');
@@ -571,40 +583,52 @@ class ProposeGitActionTool extends WorkspaceTool {
     if (rawMessage != null && rawMessage is! String) {
       throw const ToolException('argumento "message" deve ser uma string');
     }
-    final rawPaths = arguments['paths'];
-    final paths = <String>[];
-    if (rawPaths != null) {
-      if (rawPaths is! List) {
-        throw const ToolException('argumento "paths" deve ser uma lista');
-      }
-      for (final path in rawPaths) {
-        if (path is! String) {
-          throw const ToolException('caminho invalido em "paths"');
-        }
-        paths.add(path);
-      }
-    }
-
+    final paths = _pathsFor(arguments['paths']);
     final proposal = GitActionProposal(
       type: type,
-      refName: switch (type) {
-        GitActionType.createBranch ||
-        GitActionType.checkoutBranch ||
-        GitActionType.merge ||
-        GitActionType.rebase => rawRef as String?,
-        _ => null,
-      },
-      paths: switch (type) {
-        GitActionType.stage || GitActionType.unstage => paths,
-        _ => const [],
-      },
-      message: type == GitActionType.commit ? rawMessage as String? : null,
+      refName: rawRef as String?,
+      paths: paths,
+      message: rawMessage as String?,
     );
 
-    // Valida sem executar: a LLM recebe ERRO e pode corrigir os argumentos.
-    _validator.validate(proposal, root);
-    onProposal?.call(proposal);
-    return 'Proposta registrada: ${proposal.summary}. '
-        'Aguardando aprovacao na interface.';
+    // Valida antes de confirmar ou propor para a LLM poder corrigir os args.
+    _executor.validate(proposal, root);
+    if (proposal.risk == GitActionRisk.normal) {
+      return _executor.execute(proposal, root);
+    }
+    if (onGitConfirm != null) {
+      if (await onGitConfirm!(proposal)) {
+        return _executor.execute(proposal, root);
+      }
+      throw const ToolException('operacao cancelada pelo usuario');
+    }
+    if (onProposal != null) {
+      onProposal!(proposal);
+      return 'Proposta registrada: ${proposal.summary}. '
+          'Aguardando aprovacao na interface.';
+    }
+    throw const ToolException('operacao destrutiva requer aprovacao');
+  }
+
+  GitActionType _typeFor(String name) {
+    for (final type in GitActionType.values) {
+      if (type.name == name) return type;
+    }
+    throw ToolException('tipo de acao invalido: $name');
+  }
+
+  List<String> _pathsFor(Object? rawPaths) {
+    if (rawPaths == null) return const [];
+    if (rawPaths is! List) {
+      throw const ToolException('argumento "paths" deve ser uma lista');
+    }
+    final paths = <String>[];
+    for (final path in rawPaths) {
+      if (path is! String) {
+        throw const ToolException('caminho invalido em "paths"');
+      }
+      paths.add(path);
+    }
+    return paths;
   }
 }

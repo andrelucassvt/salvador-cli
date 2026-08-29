@@ -143,21 +143,52 @@ class GitCommitPage {
   final bool hasMore;
 }
 
-/// Tipos de acao Git representaiveis na primeira versao. Operacoes
-/// destrutivas (reset --hard, clean, delete branch, push e qualquer variante
-/// de force) nao existem neste enum e nao podem ser representadas.
+/// Risco de uma acao Git, definido no codigo e nunca pelo modelo.
+enum GitActionRisk { normal, risky }
+
+/// Tipos de acao Git suportados pelo agente. Cada tipo tem argumentos fixos
+/// construidos por [GitActionExecutor], sem shell ou argumentos livres.
 enum GitActionType {
   fetch,
+  pull,
+  push,
+  pushForce,
   createBranch,
   checkoutBranch,
   stage,
   unstage,
   commit,
   merge,
-  rebase;
+  rebase,
+  resetSoft,
+  resetMixed,
+  resetHard,
+  cleanForce,
+  restoreFile,
+  removeFile,
+  moveFile,
+  deleteBranch,
+  deleteBranchForce,
+  createTag,
+  deleteTag,
+  stashPush,
+  stashPop,
+  stashApply,
+  stashDrop,
+  cherryPick,
+  revert,
+  amendCommit,
+  mergeAbort,
+  rebaseAbort,
+  rebaseContinue,
+  remoteAdd,
+  remoteRemove;
 
   String get label => switch (this) {
     GitActionType.fetch => 'fetch',
+    GitActionType.pull => 'pull',
+    GitActionType.push => 'push',
+    GitActionType.pushForce => 'push forcado',
     GitActionType.createBranch => 'criar branch',
     GitActionType.checkoutBranch => 'trocar branch',
     GitActionType.stage => 'stage',
@@ -165,6 +196,45 @@ enum GitActionType {
     GitActionType.commit => 'commit',
     GitActionType.merge => 'merge',
     GitActionType.rebase => 'rebase',
+    GitActionType.resetSoft => 'reset soft',
+    GitActionType.resetMixed => 'reset mixed',
+    GitActionType.resetHard => 'reset hard',
+    GitActionType.cleanForce => 'clean forcado',
+    GitActionType.restoreFile => 'restaurar arquivo',
+    GitActionType.removeFile => 'remover arquivo',
+    GitActionType.moveFile => 'mover arquivo',
+    GitActionType.deleteBranch => 'apagar branch',
+    GitActionType.deleteBranchForce => 'apagar branch forcado',
+    GitActionType.createTag => 'criar tag',
+    GitActionType.deleteTag => 'apagar tag',
+    GitActionType.stashPush => 'guardar stash',
+    GitActionType.stashPop => 'aplicar e remover stash',
+    GitActionType.stashApply => 'aplicar stash',
+    GitActionType.stashDrop => 'apagar stash',
+    GitActionType.cherryPick => 'cherry-pick',
+    GitActionType.revert => 'reverter commit',
+    GitActionType.amendCommit => 'alterar ultimo commit',
+    GitActionType.mergeAbort => 'abortar merge',
+    GitActionType.rebaseAbort => 'abortar rebase',
+    GitActionType.rebaseContinue => 'continuar rebase',
+    GitActionType.remoteAdd => 'adicionar remoto',
+    GitActionType.remoteRemove => 'remover remoto',
+  };
+
+  GitActionRisk get risk => switch (this) {
+    GitActionType.fetch ||
+    GitActionType.pull ||
+    GitActionType.push ||
+    GitActionType.pushForce ||
+    GitActionType.resetHard ||
+    GitActionType.cleanForce ||
+    GitActionType.restoreFile ||
+    GitActionType.removeFile ||
+    GitActionType.deleteBranchForce ||
+    GitActionType.deleteTag ||
+    GitActionType.stashDrop ||
+    GitActionType.amendCommit => GitActionRisk.risky,
+    _ => GitActionRisk.normal,
   };
 }
 
@@ -183,17 +253,47 @@ class GitActionProposal {
   final List<String> paths;
   final String? message;
 
+  GitActionRisk get risk => type.risk;
+
   String get summary {
     final base = type.label;
     return switch (type) {
-      GitActionType.fetch => 'fetch',
+      GitActionType.fetch ||
+      GitActionType.pull ||
+      GitActionType.cleanForce ||
+      GitActionType.stashPop ||
+      GitActionType.stashApply ||
+      GitActionType.stashDrop ||
+      GitActionType.mergeAbort ||
+      GitActionType.rebaseAbort ||
+      GitActionType.rebaseContinue => base,
       GitActionType.createBranch ||
       GitActionType.checkoutBranch ||
       GitActionType.merge ||
-      GitActionType.rebase => '$base $refName',
+      GitActionType.rebase ||
+      GitActionType.push ||
+      GitActionType.pushForce ||
+      GitActionType.resetSoft ||
+      GitActionType.resetMixed ||
+      GitActionType.resetHard ||
+      GitActionType.deleteBranch ||
+      GitActionType.deleteBranchForce ||
+      GitActionType.createTag ||
+      GitActionType.deleteTag ||
+      GitActionType.cherryPick ||
+      GitActionType.revert ||
+      GitActionType.remoteRemove => '$base ${refName ?? ''}'.trim(),
       GitActionType.stage ||
-      GitActionType.unstage => '$base: ${paths.join(', ')}',
-      GitActionType.commit => 'commit: ${_shortMessage(message ?? '')}',
+      GitActionType.unstage ||
+      GitActionType.restoreFile ||
+      GitActionType.removeFile ||
+      GitActionType.moveFile => '$base: ${paths.join(', ')}',
+      GitActionType.commit ||
+      GitActionType.amendCommit ||
+      GitActionType.stashPush => '$base: ${_shortMessage(message ?? '')}',
+      GitActionType.remoteAdd =>
+        '$base ${refName ?? ''}: '
+            '${_shortMessage(message ?? '')}',
     };
   }
 
@@ -236,7 +336,7 @@ class GitActionExecutor {
 
   static const _maxMessageLength = 2000;
   static const _maxPaths = 50;
-  static final RegExp _validRef = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._/-]*$');
+  static final RegExp _validRef = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._/~^-]*$');
 
   final GitProcessRunner _processRunner;
   final Duration timeout;
@@ -281,6 +381,12 @@ class GitActionExecutor {
     switch (proposal.type) {
       case GitActionType.fetch:
         return const ['fetch'];
+      case GitActionType.pull:
+        return const ['pull'];
+      case GitActionType.push:
+        return ['push', ..._optionalRef(proposal.refName)];
+      case GitActionType.pushForce:
+        return ['push', '--force', ..._optionalRef(proposal.refName)];
       case GitActionType.createBranch:
         return ['checkout', '-b', _validatedRef(proposal.refName)];
       case GitActionType.checkoutBranch:
@@ -299,6 +405,70 @@ class GitActionExecutor {
         return ['merge', '--no-edit', _validatedRef(proposal.refName)];
       case GitActionType.rebase:
         return ['rebase', _validatedRef(proposal.refName)];
+      case GitActionType.resetSoft:
+        return ['reset', '--soft', ..._optionalRef(proposal.refName)];
+      case GitActionType.resetMixed:
+        return ['reset', ..._optionalRef(proposal.refName)];
+      case GitActionType.resetHard:
+        return ['reset', '--hard', ..._optionalRef(proposal.refName)];
+      case GitActionType.cleanForce:
+        return const ['clean', '-fd'];
+      case GitActionType.restoreFile:
+        return ['restore', ..._validatedPaths(proposal.paths, root)];
+      case GitActionType.removeFile:
+        return ['rm', ..._validatedPaths(proposal.paths, root)];
+      case GitActionType.moveFile:
+        final paths = _validatedPaths(proposal.paths, root);
+        if (paths.length != 2) {
+          throw const GitException(
+            'mover arquivo exige exatamente origem e destino.',
+          );
+        }
+        return ['mv', ...paths];
+      case GitActionType.deleteBranch:
+        return ['branch', '-d', _validatedRef(proposal.refName)];
+      case GitActionType.deleteBranchForce:
+        return ['branch', '-D', _validatedRef(proposal.refName)];
+      case GitActionType.createTag:
+        return ['tag', _validatedRef(proposal.refName)];
+      case GitActionType.deleteTag:
+        return ['tag', '-d', _validatedRef(proposal.refName)];
+      case GitActionType.stashPush:
+        final message = proposal.message?.trim();
+        return [
+          'stash',
+          'push',
+          if (message != null && message.isNotEmpty) '-m',
+          if (message != null && message.isNotEmpty)
+            _validatedMessage(proposal.message),
+        ];
+      case GitActionType.stashPop:
+        return const ['stash', 'pop'];
+      case GitActionType.stashApply:
+        return const ['stash', 'apply'];
+      case GitActionType.stashDrop:
+        return const ['stash', 'drop'];
+      case GitActionType.cherryPick:
+        return ['cherry-pick', _validatedRef(proposal.refName)];
+      case GitActionType.revert:
+        return ['revert', '--no-edit', _validatedRef(proposal.refName)];
+      case GitActionType.amendCommit:
+        return ['commit', '--amend', '-m', _validatedMessage(proposal.message)];
+      case GitActionType.mergeAbort:
+        return const ['merge', '--abort'];
+      case GitActionType.rebaseAbort:
+        return const ['rebase', '--abort'];
+      case GitActionType.rebaseContinue:
+        return const ['rebase', '--continue'];
+      case GitActionType.remoteAdd:
+        return [
+          'remote',
+          'add',
+          _validatedRef(proposal.refName),
+          _validatedRemoteUrl(proposal.message),
+        ];
+      case GitActionType.remoteRemove:
+        return ['remote', 'remove', _validatedRef(proposal.refName)];
     }
   }
 
@@ -311,6 +481,11 @@ class GitActionExecutor {
       throw GitException('ref invalida: $ref');
     }
     return ref;
+  }
+
+  static List<String> _optionalRef(String? refName) {
+    if (refName == null || refName.trim().isEmpty) return const [];
+    return [_validatedRef(refName)];
   }
 
   static List<String> _validatedPaths(List<String> paths, Directory root) {
@@ -352,6 +527,20 @@ class GitActionExecutor {
       throw const GitException('mensagem de commit muito longa.');
     }
     return trimmed;
+  }
+
+  static String _validatedRemoteUrl(String? value) {
+    final url = value?.trim() ?? '';
+    if (url.isEmpty ||
+        url.startsWith('-') ||
+        url.contains('\n') ||
+        url.contains('\r')) {
+      throw const GitException('URL do remoto invalida.');
+    }
+    if (url.length > _maxMessageLength) {
+      throw const GitException('URL do remoto muito longa.');
+    }
+    return url;
   }
 
   static String _resolveRoot(Directory root) {

@@ -19,10 +19,12 @@ class AgentSession {
     this.onToolCall,
     this.onToolResult,
     this.onProposal,
+    this.onGitConfirm,
     AgentPermissions permissions = const AgentPermissions(),
     ContextFilesService? contextFiles,
     GitClient? gitClient,
     GitProfile? gitProfile,
+    GitActionExecutor? gitActionExecutor,
   }) : _mentions = root == null ? null : FileMentionService(root),
        _systemMessage = AgentMessage(
          role: 'system',
@@ -35,6 +37,8 @@ class AgentSession {
       gitClient: gitClient,
       gitProfile: gitProfile,
       onProposal: _collectProposal,
+      onGitConfirm: onGitConfirm,
+      gitActionExecutor: gitActionExecutor,
     );
     clear();
   }
@@ -47,6 +51,7 @@ class AgentSession {
   final ToolCallObserver? onToolCall;
   final ToolResultObserver? onToolResult;
   final void Function(GitActionProposal)? onProposal;
+  final GitActionConfirmation? onGitConfirm;
   final List<AgentMessage> _messages = [];
   final List<GitActionProposal> _turnProposals = [];
 
