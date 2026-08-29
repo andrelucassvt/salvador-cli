@@ -1,6 +1,6 @@
 ---
 generated_at: 2026-08-29
-source_commit: cd04dea
+source_commit: 6df9edf
 source_state: dirty
 verified_at: 2026-08-29
 status: current
@@ -8,6 +8,7 @@ related_plans:
   - 'docs/plan/salvador-desktop-redesign/00-indice.md'
   - 'docs/plan/context-files-skills.md'
   - 'docs/plan/attach-files-desktop.md'
+  - 'docs/plan/git-workspace/00-indice.md'
 ---
 
 # Estrutura do Projeto: Leve CLI (salvador_cli)
@@ -58,19 +59,20 @@ DesktopStorageService ─→ JSON versionado no diretório de dados do SO (prefe
 | Loop do agente | `lib/src/agent.dart` | `AgentSession` mantém o histórico, roda o ciclo de tool calling e devolve `AgentTurnResult` com resposta, métricas, arquivos mencionados e avisos; aceita `AgentPermissions`, `ToolResultObserver`, `ContextFilesService` (anexa o `AGENTS.md` da raiz ao system prompt) e `images` por mensagem |
 | Cliente Ollama | `lib/src/ollama_client.dart` | Interface `ChatClient` e implementação `OllamaClient`: `/api/chat` (`stream: false`, `InferenceOptions`), `/api/tags`, `/api/ps`, `/api/show`, `/api/generate` (load/unload) e `/api/version` (testConnection) |
 | Descoberta do Ollama | `lib/src/ollama_discovery.dart` | Verifica se o binário existe (`ollama --help`) e lista modelos parseando a saída de `ollama list` — usada apenas pela CLI |
-| Ferramentas de workspace | `lib/src/tools.dart` | `ToolRegistry` com `read_file`, `write_file`, `replace_in_file` e `run_command`, confinadas à raiz e filtradas por `AgentPermissions`; com `ContextFilesService`, registra também a tool `use_skill`; leitura rejeita binário/UTF-8 inválido |
+| Ferramentas de workspace | `lib/src/tools.dart` | `ToolRegistry` com `read_file`, `write_file`, `replace_in_file` e `run_command`, confinadas à raiz e filtradas por `AgentPermissions`; com `ContextFilesService`, registra também a tool `use_skill`; com `GitProfile`, troca o shell por consultas Git e `propose_git_action`; leitura rejeita binário/UTF-8 inválido |
+| Cliente Git | `lib/src/git.dart` | `GitClient` (snapshot somente leitura, top-level tem que coincidir com a raiz), `GitActionProposal`/`GitActionExecutor` (argv fixos, sem shell) e `serializeGitContext` |
 | Contexto de arquivos | `lib/src/context_files.dart` | `ContextFilesService` descobre skills em `.agents/skills/*/SKILL.md` (`SkillInfo` com `description:` do frontmatter), injeta o `AGENTS.md` da raiz no system prompt, expande menções `/skill` no prompt e fornece conteúdo à tool `use_skill`; limites de 64 KiB e confinamento por symlink próprio |
 | Menções de arquivo (`@`) | `lib/src/file_mentions.dart` | Indexa arquivos do projeto para autocomplete e injeta o conteúdo dos arquivos mencionados no prompt; `ignoredDirectories` é público para o painel de arquivos |
 | Editor de linha do terminal | `lib/src/terminal_input.dart` | Editor sem dependências com menu inline de autocomplete para `@arquivo` e comandos `/` (setas + `Tab`) |
 | Configuração da CLI | `lib/src/config.dart` | `CliConfig.parse` lê `--model`, `--host`, `--root`, `--no-context`, `-h/--help` e as variáveis `OLLAMA_MODEL`/`OLLAMA_HOST` |
 | CLI interativa | `bin/salvador_cli.dart` | Ponto de entrada: valida o Ollama, oferece a seleção de modelo e roda o chat com `/clear`, `/exit`, `/quit` e comandos `/skill` gerados das skills descobertas |
-| App desktop | `app/lib/presentation/desktop/` | Clean Architecture com GetIt (`AppInjector`): `WorkspaceCubit`/`ChatCubit`/`FileExplorerCubit`/`SettingsCubit` orquestram conexão HTTP, carga de modelos, configurações, atividade/sessões, árvore/preview e anexos; `DesktopView` (em `view/`) desenha o shell (top bar, painéis com rails, modal, composer, markdown) |
+| App desktop | `app/lib/presentation/desktop/` | Clean Architecture com GetIt (`AppInjector`): `WorkspaceCubit`/`ChatCubit`/`FileExplorerCubit`/`GitCubit`/`GitAssistantCubit`/`SettingsCubit` orquestram conexão HTTP, carga de modelos, configurações, atividade/sessões, árvore/preview, anexos e o modo Git; `DesktopView` (em `view/`) desenha o shell (top bar, painéis com rails Chat/Git, modal, composer, markdown) |
 
 ## Camadas / Módulos Compartilhados
 
 | Tipo | Caminho | Responsabilidade |
 |------|---------|-----------------|
-| Barrel público | `lib/salvador_cli.dart` | Único ponto de importação do pacote; reexporta os dez módulos de `lib/src/` |
+| Barrel público | `lib/salvador_cli.dart` | Único ponto de importação do pacote; reexporta os onze módulos de `lib/src/` |
 | Modelos e serialização | `lib/src/models.dart` | `AgentMessage`, `ToolCall`, `ToolDefinition`, `InferenceMetrics`, `InferenceOptions`, `OllamaModelInfo`, `OllamaRunningModel` e `formatInferenceMetrics` |
 | System prompt | `lib/src/prompt.dart` | `systemPrompt`: sete linhas, dimensionado para modelos pequenos; o caminho da raiz e o `AGENTS.md` são anexados pelo `AgentSession` |
 | Contexto de arquivos | `lib/src/context_files.dart` | `SkillInfo` + `ContextFilesService`: `discoverSkills()`, `agentsMdContext()`, `expand()` (`/skill`) e `skillContent()` para a tool `use_skill`; confinamento por symlink e limites de 64 KiB |
@@ -79,8 +81,8 @@ DesktopStorageService ─→ JSON versionado no diretório de dados do SO (prefe
 | Memória do sistema | `app/lib/common/services/system_memory_service.dart` | `SystemMemoryReader`: RAM disponível por plataforma com runner injetável |
 | Formatação do desktop | `app/lib/common/utils/formatters.dart` | Helpers de formatação compartilhados entre views |
 | Arquitetura do app | `app/lib/config/inject/app_injector.dart`, `app/lib/domain/`, `app/lib/data/`, `app/lib/config/error/` | GetIt registra services → datasources → repositories → cubits; entidades e contratos de Repository no domínio; datasources/repos com `Result<T>` e `AppException`; datasources encapsulam o pacote (`OllamaRemoteDataSource`/`ChatAgentDataSource` com `OllamaClientFactory` injetável) |
-| Apresentação do app | `app/lib/presentation/desktop/` | `view/` (`DesktopView`, shell) + `view_model/` (`WorkspaceCubit`/`ChatCubit`/`FileExplorerCubit`/`SettingsCubit`) + `content/`, `widgets/` e `theme/` |
-| Testes do pacote | `test/` | `salvador_cli_test.dart`, `config_test.dart`, `context_files_test.dart`, `ollama_client_test.dart`, `ollama_discovery_test.dart`, `file_mentions_test.dart`, `terminal_input_test.dart` |
+| Apresentação do app | `app/lib/presentation/desktop/` | `view/` (`DesktopView`, shell) + `view_model/` (`WorkspaceCubit`/`ChatCubit`/`FileExplorerCubit`/`GitCubit`/`GitAssistantCubit`/`SettingsCubit`) + `content/`, `widgets/` e `theme/` |
+| Testes do pacote | `test/` | `salvador_cli_test.dart`, `config_test.dart`, `context_files_test.dart`, `git_test.dart`, `ollama_client_test.dart`, `ollama_discovery_test.dart`, `file_mentions_test.dart`, `terminal_input_test.dart` |
 | Testes do app | `app/test/` | Cubits com fakes de Repository (`presentation/desktop/fakes/`), RepositoryImpl com fakes de DataSource (`data/chat/`, `data/ollama/`, `data/workspace/`), entidades/erros (`domain/entities/`, `config/error/`), services (`common/services/`) e `salvador_desktop_app_test.dart` (widget tests do shell) |
 | Runners nativos | `app/macos/`, `app/linux/`, `app/windows/` | Projetos de plataforma gerados pelo Flutter |
 

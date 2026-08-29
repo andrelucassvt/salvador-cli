@@ -93,6 +93,13 @@ class GitCubit extends Cubit<GitState> {
     emit(current.copyWith(selectedFilePath: path));
   }
 
+  /// Descarta o erro da ultima acao aprovada.
+  void clearActionError() {
+    final current = state;
+    if (current is! GitLoaded || current.actionError == null) return;
+    emit(current.copyWith(clearActionError: true));
+  }
+
   /// Carrega a proxima pagina do historico, concatenando sem duplicar
   /// hashes e preservando a selecao atual.
   Future<void> loadMore() async {
@@ -157,5 +164,39 @@ class GitCubit extends Cubit<GitState> {
       if (entry.path == path) return true;
     }
     return false;
+  }
+
+  /// Executa uma acao aprovada pela interface, recarregando o snapshot
+  /// somente apos sucesso. Falha preserva o snapshot anterior e expoe o erro.
+  Future<bool> executeApproved(GitActionProposal proposal) async {
+    final current = state;
+    final root = _root;
+    if (current is! GitLoaded ||
+        root == null ||
+        current.executingAction != null ||
+        current.loadingMore) {
+      return false;
+    }
+    emit(current.copyWith(executingAction: proposal, clearActionError: true));
+    final result = await _repository.executeAction(
+      root: root,
+      proposal: proposal,
+    );
+    final latest = state;
+    if (latest is! GitLoaded) return false;
+    switch (result) {
+      case Ok():
+        emit(latest.copyWith(clearExecutingAction: true));
+        await refresh();
+        return true;
+      case Error(:final error):
+        emit(
+          latest.copyWith(
+            clearExecutingAction: true,
+            actionError: error.message,
+          ),
+        );
+        return false;
+    }
   }
 }

@@ -15,4 +15,11 @@ abstract interface class GitRepository {
     required int skip,
     required int count,
   });
+
+  /// Executa uma acao ja aprovada pela interface; mutacoes nunca rodam por
+  /// tool call da LLM.
+  Future<Result<String>> executeAction({
+    required Directory root,
+    required GitActionProposal proposal,
+  });
 }

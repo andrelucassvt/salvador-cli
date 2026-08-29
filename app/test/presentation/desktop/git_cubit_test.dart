@@ -31,6 +31,16 @@ void main() {
           headOid: '6b8dc2efa9f5ff3a00f6262229969f841cefa6fc',
         ),
         ahead: ahead,
+        commits: [
+          GitCommit(
+            hash: '6b8dc2efa9f5ff3a00f6262229969f841cefa6fc',
+            shortHash: '6b8dc2e',
+            subject: 'commit principal',
+            authorName: 't',
+            authorEmail: 't@t.co',
+            authorDate: DateTime(2026, 8, 29),
+          ),
+        ],
         worktree: const [
           GitWorktreeEntry(path: 'a.txt', status: GitWorktreeStatus.unstaged),
         ],
@@ -389,6 +399,111 @@ void main() {
         'a000000000000000000000000000000000000000',
       );
       expect(state.hasMoreCommits, isTrue);
+      await cubit.close();
+    });
+  });
+
+  group('GitCubit.executeApproved', () {
+    const proposal = GitActionProposal(
+      type: GitActionType.stage,
+      paths: ['a.txt'],
+    );
+
+    test(
+      'confirma executa exatamente uma vez com a proposta exibida',
+      () async {
+        fakeRepository.nextResult = Result.ok(validSnapshot());
+        final cubit = GitCubit(fakeRepository);
+        await cubit.setRoot(root);
+
+        fakeRepository.nextActionResult = const Result.ok('OK: staged');
+        fakeRepository.nextResult = Result.ok(validSnapshot());
+        final executed = await cubit.executeApproved(proposal);
+
+        expect(executed, isTrue);
+        expect(fakeRepository.executedActions, [proposal]);
+        expect(
+          (cubit.state as GitLoaded).actionError,
+          isNull,
+          reason: 'sucesso nao deixa erro',
+        );
+        await cubit.close();
+      },
+    );
+
+    test('sucesso recarrega o snapshot (refresh) e preserva selecao', () async {
+      fakeRepository.nextResult = Result.ok(validSnapshot());
+      final cubit = GitCubit(fakeRepository);
+      await cubit.setRoot(root);
+      cubit.selectCommit('6b8dc2efa9f5ff3a00f6262229969f841cefa6fc');
+      final loadsBefore = fakeRepository.loadCallCount;
+
+      fakeRepository.nextActionResult = const Result.ok('OK');
+      fakeRepository.nextResult = Result.ok(validSnapshot());
+      await cubit.executeApproved(proposal);
+
+      expect(fakeRepository.loadCallCount, loadsBefore + 1);
+      expect(
+        (cubit.state as GitLoaded).selectedCommitHash,
+        '6b8dc2efa9f5ff3a00f6262229969f841cefa6fc',
+      );
+      await cubit.close();
+    });
+
+    test('falha preserva o snapshot anterior e expoe o erro', () async {
+      final first = validSnapshot();
+      fakeRepository.nextResult = Result.ok(first);
+      final cubit = GitCubit(fakeRepository);
+      await cubit.setRoot(root);
+      final loadsBefore = fakeRepository.loadCallCount;
+
+      fakeRepository.nextActionResult = const Result.error(
+        GitFailureException('conflito no merge'),
+      );
+      final executed = await cubit.executeApproved(proposal);
+
+      expect(executed, isFalse);
+      final state = cubit.state as GitLoaded;
+      expect(state.snapshot, same(first));
+      expect(state.actionError, 'conflito no merge');
+      expect(
+        fakeRepository.loadCallCount,
+        loadsBefore,
+        reason: 'sem refresh apos falha',
+      );
+      await cubit.close();
+    });
+
+    test('bloqueia execucao concorrente', () async {
+      fakeRepository.nextResult = Result.ok(validSnapshot());
+      final cubit = GitCubit(fakeRepository);
+      await cubit.setRoot(root);
+      fakeRepository.nextActionResult = const Result.ok('OK');
+      fakeRepository.nextResult = Result.ok(validSnapshot());
+
+      final firstCall = cubit.executeApproved(proposal);
+      final secondCall = cubit.executeApproved(proposal);
+
+      expect(await secondCall, isFalse);
+      expect(await firstCall, isTrue);
+      expect(
+        fakeRepository.executedActions,
+        [proposal],
+        reason: 'a segunda chamada concorrente nao executa nada',
+      );
+      await cubit.close();
+    });
+
+    test('cancelar nunca chama execute', () async {
+      fakeRepository.nextResult = Result.ok(validSnapshot());
+      final cubit = GitCubit(fakeRepository);
+      await cubit.setRoot(root);
+
+      fakeRepository.nextActionResult = const Result.ok('OK');
+      fakeRepository.nextResult = Result.ok(validSnapshot());
+      await cubit.executeApproved(proposal);
+
+      expect(fakeRepository.executedActions, [proposal]);
       await cubit.close();
     });
   });

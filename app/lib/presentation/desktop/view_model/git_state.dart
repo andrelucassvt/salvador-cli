@@ -45,6 +45,8 @@ class GitLoaded extends GitState {
     this.selectedRef,
     this.selectedCommitHash,
     this.selectedFilePath,
+    this.executingAction,
+    this.actionError,
   });
 
   final GitSnapshot snapshot;
@@ -60,6 +62,12 @@ class GitLoaded extends GitState {
   final String? selectedRef;
   final String? selectedCommitHash;
   final String? selectedFilePath;
+
+  /// Acao aprovada em execucao (bloqueia novas execucoes concorrentes).
+  final GitActionProposal? executingAction;
+
+  /// Falha apresentavel da ultima acao; o snapshot anterior e preservado.
+  final String? actionError;
 
   List<GitCommit> get visibleCommits => commits ?? snapshot.commits;
 
@@ -109,6 +117,10 @@ class GitLoaded extends GitState {
     bool clearSelectedCommit = false,
     String? selectedFilePath,
     bool clearSelectedFile = false,
+    GitActionProposal? executingAction,
+    bool clearExecutingAction = false,
+    String? actionError,
+    bool clearActionError = false,
   }) {
     return GitLoaded(
       snapshot: snapshot ?? this.snapshot,
@@ -123,6 +135,10 @@ class GitLoaded extends GitState {
       selectedFilePath: clearSelectedFile
           ? null
           : (selectedFilePath ?? this.selectedFilePath),
+      executingAction: clearExecutingAction
+          ? null
+          : (executingAction ?? this.executingAction),
+      actionError: clearActionError ? null : (actionError ?? this.actionError),
     );
   }
 
@@ -147,7 +163,9 @@ class GitLoaded extends GitState {
       other.searchQuery == searchQuery &&
       other.selectedRef == selectedRef &&
       other.selectedCommitHash == selectedCommitHash &&
-      other.selectedFilePath == selectedFilePath;
+      other.selectedFilePath == selectedFilePath &&
+      other.executingAction == executingAction &&
+      other.actionError == actionError;
 
   @override
   int get hashCode => Object.hash(
@@ -169,6 +187,8 @@ class GitLoaded extends GitState {
     selectedRef,
     selectedCommitHash,
     selectedFilePath,
+    executingAction,
+    actionError,
   );
 
   @override

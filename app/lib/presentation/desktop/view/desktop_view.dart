@@ -14,6 +14,7 @@ import 'package:salvador_desktop/presentation/desktop/view_model/chat_cubit.dart
 import 'package:salvador_desktop/presentation/desktop/view_model/chat_state.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/file_explorer_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/file_explorer_state.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/git_assistant_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/git_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/workspace_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/workspace_state.dart';
@@ -123,6 +124,7 @@ class _ShellScreenState extends State<_ShellScreen> {
   late final ChatCubit _chatCubit;
   late final FileExplorerCubit _fileExplorerCubit;
   late final GitCubit _gitCubit;
+  late final GitAssistantCubit _gitAssistantCubit;
   final _promptController = TextEditingController();
   final _promptFocus = FocusNode();
   final _scrollController = ScrollController();
@@ -140,6 +142,7 @@ class _ShellScreenState extends State<_ShellScreen> {
     _chatCubit = AppInjector.inject<ChatCubit>();
     _fileExplorerCubit = AppInjector.inject<FileExplorerCubit>();
     _gitCubit = AppInjector.inject<GitCubit>();
+    _gitAssistantCubit = AppInjector.inject<GitAssistantCubit>();
     _promptController.addListener(_updateSuggestions);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _workspaceCubit.initialize();
@@ -152,6 +155,7 @@ class _ShellScreenState extends State<_ShellScreen> {
     _chatCubit.close();
     _fileExplorerCubit.close();
     _gitCubit.close();
+    _gitAssistantCubit.close();
     _promptController.dispose();
     _promptFocus.dispose();
     _scrollController.dispose();
@@ -294,6 +298,7 @@ class _ShellScreenState extends State<_ShellScreen> {
         BlocProvider<ChatCubit>.value(value: _chatCubit),
         BlocProvider<FileExplorerCubit>.value(value: _fileExplorerCubit),
         BlocProvider<GitCubit>.value(value: _gitCubit),
+        BlocProvider<GitAssistantCubit>.value(value: _gitAssistantCubit),
       ],
       child: MultiBlocListener(
         listeners: [
@@ -320,6 +325,13 @@ class _ShellScreenState extends State<_ShellScreen> {
                 permissions: ready.permissions,
                 contextFilesEnabled: ready.contextFilesEnabled,
               );
+              _gitAssistantCubit.attachSession(
+                host: ready.host,
+                model: ready.selectedModel!,
+                options: ready.inference,
+                root: ready.root,
+                permissions: ready.permissions,
+              );
             },
           ),
           BlocListener<WorkspaceCubit, WorkspaceState>(
@@ -343,6 +355,11 @@ class _ShellScreenState extends State<_ShellScreen> {
             listener: (context, state) {
               final ready = state as WorkspaceReady;
               _chatCubit.updateReadiness(
+                !ready.connecting &&
+                    ready.selectedModel != null &&
+                    ready.modelState != WorkspaceModelState.starting,
+              );
+              _gitAssistantCubit.updateReadiness(
                 !ready.connecting &&
                     ready.selectedModel != null &&
                     ready.modelState != WorkspaceModelState.starting,

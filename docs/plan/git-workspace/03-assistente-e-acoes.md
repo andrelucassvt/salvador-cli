@@ -37,73 +37,73 @@ O agente atual executa imediatamente qualquer tool call exposta e pode oferecer 
 
 > Os testes vão falhar inicialmente — isso é intencional.
 
-- [ ] Declarar em `lib/src/git.dart`, `lib/src/tools.dart` e `lib/src/agent.dart` os enums, tipos de proposta e assinaturas opcionais do perfil Git com corpos provisórios, preservando defaults das sessões normais para que os testes compilem antes da lógica.
-- [ ] Estender `test/git_test.dart` para `GitAction` de fetch, criar/trocar branch, stage, unstage, commit, merge e rebase, verificando listas exatas de argumentos sem shell.
-- [ ] Testar validações de branch/ref/caminho/mensagem vazia, rejeição de caminho fora da raiz e impossibilidade de representar reset hard, clean, delete, push ou force no enum público.
-- [ ] Estender `test/salvador_cli_test.dart` para o perfil Git expor consultas estruturadas e `propose_git_action`, sem expor `run_command` mesmo quando as permissões normais permitem comandos.
-- [ ] Testar que `propose_git_action` só acumula `GitActionProposal` em `AgentTurnResult`, não chama o runner e devolve à LLM uma mensagem de aprovação pendente.
-- [ ] Testar que o perfil Git respeita `allowEdit` para `write_file`/`replace_in_file` durante resolução de conflitos.
-- [ ] Verificação: `dart test test/git_test.dart test/salvador_cli_test.dart` compila e falha somente pelas APIs ainda não implementadas.
+- [x] Declarar em `lib/src/git.dart`, `lib/src/tools.dart` e `lib/src/agent.dart` os enums, tipos de proposta e assinaturas opcionais do perfil Git com corpos provisórios, preservando defaults das sessões normais para que os testes compilem antes da lógica.
+- [x] Estender `test/git_test.dart` para `GitAction` de fetch, criar/trocar branch, stage, unstage, commit, merge e rebase, verificando listas exatas de argumentos sem shell.
+- [x] Testar validações de branch/ref/caminho/mensagem vazia, rejeição de caminho fora da raiz e impossibilidade de representar reset hard, clean, delete, push ou force no enum público.
+- [x] Estender `test/salvador_cli_test.dart` para o perfil Git expor consultas estruturadas e `propose_git_action`, sem expor `run_command` mesmo quando as permissões normais permitem comandos.
+- [x] Testar que `propose_git_action` só acumula `GitActionProposal` em `AgentTurnResult`, não chama o runner e devolve à LLM uma mensagem de aprovação pendente.
+- [x] Testar que o perfil Git respeita `allowEdit` para `write_file`/`replace_in_file` durante resolução de conflitos.
+- [x] Verificação: `dart test test/git_test.dart test/salvador_cli_test.dart` compila e falha somente pelas APIs ainda não implementadas.
 
 ### Fase 2 — Implementar ferramentas Git e execução tipada
 
-- [ ] Adicionar em `lib/src/git.dart` `GitActionType`, `GitActionProposal` e executor que converte somente variantes permitidas em argumentos fixos para `GitClient`.
-- [ ] Implementar validação de refs e caminhos relativos antes do processo; não adicionar flags destrutivas, push/pull ou comandos livres à API.
-- [ ] Adicionar em `lib/src/tools.dart` ferramentas enxutas de status/log/diff/show e `propose_git_action`, compartilhando `GitClient` e limites de saída.
-- [ ] Estender `ToolRegistry`/`AgentSession` em `lib/src/tools.dart` e `lib/src/agent.dart` com perfil Git opcional, mantendo as definições atuais inalteradas em sessões normais.
-- [ ] Acumular propostas no turno e retorná-las em `AgentTurnResult`; erros das ferramentas continuam como `ERRO: <motivo>` para a LLM corrigir argumentos.
-- [ ] Verificação: `dart test test/git_test.dart test/salvador_cli_test.dart` passa e confirma zero invocações do runner para propostas não aprovadas.
+- [x] Adicionar em `lib/src/git.dart` `GitActionType`, `GitActionProposal` e executor que converte somente variantes permitidas em argumentos fixos para `GitClient`.
+- [x] Implementar validação de refs e caminhos relativos antes do processo; não adicionar flags destrutivas, push/pull ou comandos livres à API.
+- [x] Adicionar em `lib/src/tools.dart` ferramentas enxutas de status/log/diff/show e `propose_git_action`, compartilhando `GitClient` e limites de saída.
+- [x] Estender `ToolRegistry`/`AgentSession` em `lib/src/tools.dart` e `lib/src/agent.dart` com perfil Git opcional, mantendo as definições atuais inalteradas em sessões normais.
+- [x] Acumular propostas no turno e retorná-las em `AgentTurnResult`; erros das ferramentas continuam como `ERRO: <motivo>` para a LLM corrigir argumentos.
+- [x] Verificação: `dart test test/git_test.dart test/salvador_cli_test.dart` passa e confirma zero invocações do runner para propostas não aprovadas.
 
 ### Fase 3 — Testes da sessão dedicada e aprovação no app
 
 > Os testes vão falhar inicialmente — isso é intencional.
 
-- [ ] Declarar as assinaturas mínimas de `GitAssistantRepository`, `GitAssistantRepositoryImpl`, `GitAssistantState` e `GitAssistantCubit` nos caminhos planejados, com corpos provisórios, para os testes falharem por comportamento e não por símbolos ausentes.
-- [ ] Criar fakes e `app/test/data/git/git_assistant_repository_impl_test.dart` cobrindo configuração com raiz/modelo, contexto selecionado, resposta, proposta e falhas do agente/Ollama.
-- [ ] Criar `app/test/presentation/desktop/git_assistant_cubit_test.dart` para abrir/fechar drawer, enviar seleção contextual, impedir envio sem readiness, preservar mensagens e registrar propostas pendentes.
-- [ ] Estender `app/test/presentation/desktop/git_cubit_test.dart` para confirmação/cancelamento, sucesso com refresh, falha preservando snapshot e bloqueio de execução concorrente.
-- [ ] Definir no fake que cancelar nunca chama `GitRepository.execute`, e confirmar chama exatamente uma vez com a proposta exibida.
-- [ ] Testar serialização contextual limitada a ref/commit/arquivos selecionados, com marcador de truncamento para diff grande e sem despejar o snapshot inteiro.
-- [ ] Verificação: os testes compilam e falham apenas pela integração ainda ausente.
+- [x] Declarar as assinaturas mínimas de `GitAssistantRepository`, `GitAssistantRepositoryImpl`, `GitAssistantState` e `GitAssistantCubit` nos caminhos planejados, com corpos provisórios, para os testes falharem por comportamento e não por símbolos ausentes.
+- [x] Criar fakes e `app/test/data/git/git_assistant_repository_impl_test.dart` cobrindo configuração com raiz/modelo, contexto selecionado, resposta, proposta e falhas do agente/Ollama.
+- [x] Criar `app/test/presentation/desktop/git_assistant_cubit_test.dart` para abrir/fechar drawer, enviar seleção contextual, impedir envio sem readiness, preservar mensagens e registrar propostas pendentes.
+- [x] Estender `app/test/presentation/desktop/git_cubit_test.dart` para confirmação/cancelamento, sucesso com refresh, falha preservando snapshot e bloqueio de execução concorrente.
+- [x] Definir no fake que cancelar nunca chama `GitRepository.execute`, e confirmar chama exatamente uma vez com a proposta exibida.
+- [x] Testar serialização contextual limitada a ref/commit/arquivos selecionados, com marcador de truncamento para diff grande e sem despejar o snapshot inteiro.
+- [x] Verificação: os testes compilam e falham apenas pela integração ainda ausente.
 
 ### Fase 4 — Implementar sessão, estado e DI do assistente
 
-- [ ] Criar `GitAssistantRepository` e implementação/data source nos caminhos planejados, com `AgentSession` próprio, `allowCommands: false`, ferramentas Git habilitadas e edição de arquivo conforme `AgentPermissions.allowEdit`.
-- [ ] Implementar `GitAssistantCubit/State` com mensagens independentes do chat principal, readiness, contexto selecionado, propostas pendentes, atividades e erros tipados.
-- [ ] Construir o prompt contextual no datasource a partir de `GitSnapshot` + seleção, com limites explícitos e sem alterar `lib/src/prompt.dart`.
-- [ ] Implementar `GitRepository.execute` e `GitCubit.executeApproved`, atualizando o snapshot somente após sucesso e mantendo erro apresentável sem descartar dados anteriores.
-- [ ] Registrar data source/repository/Cubit dedicados em `app_injector.dart`; a View continua responsável por sincronizar raiz, modelo, permissões e readiness entre Cubits.
-- [ ] Verificação: `cd app && flutter test test/data/git/git_assistant_repository_impl_test.dart test/presentation/desktop/git_assistant_cubit_test.dart test/presentation/desktop/git_cubit_test.dart` passa.
+- [x] Criar `GitAssistantRepository` e implementação/data source nos caminhos planejados, com `AgentSession` próprio, `allowCommands: false`, ferramentas Git habilitadas e edição de arquivo conforme `AgentPermissions.allowEdit`.
+- [x] Implementar `GitAssistantCubit/State` com mensagens independentes do chat principal, readiness, contexto selecionado, propostas pendentes, atividades e erros tipados.
+- [x] Construir o prompt contextual no datasource a partir de `GitSnapshot` + seleção, com limites explícitos e sem alterar `lib/src/prompt.dart`.
+- [x] Implementar `GitRepository.execute` e `GitCubit.executeApproved`, atualizando o snapshot somente após sucesso e mantendo erro apresentável sem descartar dados anteriores.
+- [x] Registrar data source/repository/Cubit dedicados em `app_injector.dart`; a View continua responsável por sincronizar raiz, modelo, permissões e readiness entre Cubits.
+- [x] Verificação: `cd app && flutter test test/data/git/git_assistant_repository_impl_test.dart test/presentation/desktop/git_assistant_cubit_test.dart test/presentation/desktop/git_cubit_test.dart` passa.
 
 ### Fase 5 — Implementar drawer, revisão e ações
 
-- [ ] Criar `GitAssistantDrawer` com histórico próprio, composer, chips de branch/commit/arquivo, atividades, propostas e estados modelo parado/enviando/erro.
-- [ ] Adicionar “Pedir ao Salvador” em `git_workspace.dart`; abrir o drawer sem remover a seleção e iniciar o modelo pelo mesmo fluxo seguro usado em `_ShellScreenState._send` antes de enviar.
-- [ ] Criar `GitActionReviewDialog` mostrando tipo, refs, caminhos, mensagem de commit, impacto local/rede e botões Cancelar/Confirmar; nenhuma proposta executa no callback de abertura.
-- [ ] Ligar confirmação a `GitCubit.executeApproved` e, após sucesso, atualizar branches, grafo, worktree e inspector; exibir falha no workspace sem fechar o contexto do assistente.
-- [ ] Implementar o botão Fetch como ação explícita com loading/erro; propostas de fetch passam pelo mesmo dialog por envolver rede.
-- [ ] Estender `app/test/presentation/desktop/git_workspace_test.dart` e `app/test/salvador_desktop_app_test.dart` para drawer, contexto, cancelamento, confirmação, refresh e preservação do chat principal.
-- [ ] Verificação: os widget tests confirmam que apenas Confirmar chama o repository e que Chat/Git mantêm conversas independentes.
+- [x] Criar `GitAssistantDrawer` com histórico próprio, composer, chips de branch/commit/arquivo, atividades, propostas e estados modelo parado/enviando/erro.
+- [x] Adicionar “Pedir ao Salvador” em `git_workspace.dart`; abrir o drawer sem remover a seleção e iniciar o modelo pelo mesmo fluxo seguro usado em `_ShellScreenState._send` antes de enviar.
+- [x] Criar `GitActionReviewDialog` mostrando tipo, refs, caminhos, mensagem de commit, impacto local/rede e botões Cancelar/Confirmar; nenhuma proposta executa no callback de abertura.
+- [x] Ligar confirmação a `GitCubit.executeApproved` e, após sucesso, atualizar branches, grafo, worktree e inspector; exibir falha no workspace sem fechar o contexto do assistente.
+- [x] Implementar o botão Fetch como ação explícita com loading/erro; propostas de fetch passam pelo mesmo dialog por envolver rede.
+- [x] Estender `app/test/presentation/desktop/git_workspace_test.dart` e `app/test/salvador_desktop_app_test.dart` para drawer, contexto, cancelamento, confirmação, refresh e preservação do chat principal.
+- [x] Verificação: os widget tests confirmam que apenas Confirmar chama o repository e que Chat/Git mantêm conversas independentes.
 
 ### Fase 6 — Segurança, documentação e verificação final
 
-- [ ] Executar `dart format` nos Dart alterados e `git diff --check`.
-- [ ] Executar `dart analyze` e `dart test`, incluindo as asserções de ausência de shell, force/reset/clean/delete/push e confinamento da raiz.
-- [ ] Executar `cd app && flutter analyze` e `cd app && flutter test`, sem iniciar app, Ollama, servidor, emulador ou dispositivo.
-- [ ] Atualizar `docs/flow/app-desktop.md` nas seções de montagem do shell, sincronização entre Cubits, envio ao agente, arquivos envolvidos e regras de negócio.
-- [ ] Invocar a skill `flow` para criar `docs/flow/git-workspace.md` cobrindo raiz → snapshot → seleção → contexto LLM → proposta → revisão → execução → refresh, incluindo erros e limites.
-- [ ] Verificação: todos os comandos passam, os testes provam que propostas não executam sem confirmação e os dois flows descrevem os caminhos e regras novos.
-- [ ] Checkpoint: commit final do Git Workspace + resumo das três partes concluídas.
+- [x] Executar `dart format` nos Dart alterados e `git diff --check`.
+- [x] Executar `dart analyze` e `dart test`, incluindo as asserções de ausência de shell, force/reset/clean/delete/push e confinamento da raiz.
+- [x] Executar `cd app && flutter analyze` e `cd app && flutter test`, sem iniciar app, Ollama, servidor, emulador ou dispositivo.
+- [x] Atualizar `docs/flow/app-desktop.md` nas seções de montagem do shell, sincronização entre Cubits, envio ao agente, arquivos envolvidos e regras de negócio.
+- [x] Invocar a skill `flow` para criar `docs/flow/git-workspace.md` cobrindo raiz → snapshot → seleção → contexto LLM → proposta → revisão → execução → refresh, incluindo erros e limites.
+- [x] Verificação: todos os comandos passam, os testes provam que propostas não executam sem confirmação e os dois flows descrevem os caminhos e regras novos.
+- [x] Checkpoint: commit final do Git Workspace + resumo das três partes concluídas.
 
 ## Critérios de Sucesso
 
-- [ ] A LLM consulta Git por ferramentas estruturadas sem receber `run_command` na sessão dedicada.
-- [ ] Toda mutação proposta exige revisão explícita e cancelar produz zero efeitos.
-- [ ] Somente fetch, criar/trocar branch, stage, unstage, commit, merge e rebase são representáveis na primeira versão.
-- [ ] O contexto enviado contém apenas a seleção e marca truncamentos de forma visível.
-- [ ] Após uma ação aprovada, branches, grafo e worktree são recarregados.
-- [ ] Chat normal e assistente Git mantêm sessões independentes.
-- [ ] `dart analyze`, `dart test`, `cd app && flutter analyze` e `cd app && flutter test` passam.
+- [x] A LLM consulta Git por ferramentas estruturadas sem receber `run_command` na sessão dedicada.
+- [x] Toda mutação proposta exige revisão explícita e cancelar produz zero efeitos.
+- [x] Somente fetch, criar/trocar branch, stage, unstage, commit, merge e rebase são representáveis na primeira versão.
+- [x] O contexto enviado contém apenas a seleção e marca truncamentos de forma visível.
+- [x] Após uma ação aprovada, branches, grafo e worktree são recarregados.
+- [x] Chat normal e assistente Git mantêm sessões independentes.
+- [x] `dart analyze`, `dart test`, `cd app && flutter analyze` e `cd app && flutter test` passam.
 - [ ] _(manual — feito pelo usuário)_ Testar pedir comparação de branches, explicar commit, criar/trocar branch, preparar commit e cancelar uma proposta.
 - [ ] _(manual — feito pelo usuário)_ Testar resolução de conflito com edição habilitada, falha de merge/rebase, detached HEAD e Fetch sem rede.
 

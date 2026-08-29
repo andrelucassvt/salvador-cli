@@ -11,8 +11,10 @@ class FakeGitDataSource implements GitDataSource {
   GitSnapshot? snapshotToReturn;
   Object? errorToThrow;
   GitCommitPage? pageToReturn;
+  String? actionResult;
   final List<int> requestedMaxCommits = [];
   final List<(int, int)> requestedPages = [];
+  final List<GitActionProposal> executedActions = [];
 
   @override
   Future<GitSnapshot> loadSnapshot(
@@ -33,5 +35,15 @@ class FakeGitDataSource implements GitDataSource {
     requestedPages.add((skip, count));
     if (errorToThrow != null) throw errorToThrow!;
     return pageToReturn ?? const GitCommitPage(commits: [], hasMore: false);
+  }
+
+  @override
+  Future<String> executeAction(
+    Directory root,
+    GitActionProposal proposal,
+  ) async {
+    executedActions.add(proposal);
+    if (errorToThrow != null) throw errorToThrow!;
+    return actionResult ?? 'OK: acao executada';
   }
 }

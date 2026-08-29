@@ -18,4 +18,7 @@ class GitDataSource {
     required int skip,
     required int count,
   }) => _client.loadMoreCommits(root, skip: skip, count: count);
+
+  Future<String> executeAction(Directory root, GitActionProposal proposal) =>
+      GitActionExecutor().execute(proposal, root);
 }

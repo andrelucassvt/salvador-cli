@@ -590,6 +590,274 @@ void main() {
       ]);
     });
   });
+
+  group('GitActionProposal', () {
+    test('enum nao representa reset hard, clean, delete, push ou force', () {
+      final names = GitActionType.values.map((type) => type.name).toList();
+      expect(names, [
+        'fetch',
+        'createBranch',
+        'checkoutBranch',
+        'stage',
+        'unstage',
+        'commit',
+        'merge',
+        'rebase',
+      ]);
+      expect(
+        names.join(' ').toLowerCase(),
+        isNot(contains(RegExp(r'reset|clean|delete|push|force'))),
+      );
+    });
+
+    test('resumo descreve o tipo e a selecao', () {
+      expect(
+        const GitActionProposal(type: GitActionType.fetch).summary,
+        'fetch',
+      );
+      expect(
+        const GitActionProposal(
+          type: GitActionType.createBranch,
+          refName: 'feature-x',
+        ).summary,
+        'criar branch feature-x',
+      );
+      expect(
+        const GitActionProposal(
+          type: GitActionType.commit,
+          message: 'corrige parse do status',
+        ).summary,
+        'commit: corrige parse do status',
+      );
+      expect(
+        const GitActionProposal(
+          type: GitActionType.stage,
+          paths: ['a.txt', 'b.txt'],
+        ).summary,
+        'stage: a.txt, b.txt',
+      );
+    });
+  });
+
+  group('GitActionExecutor', () {
+    test('fetch usa argumentos fixos sem shell', () async {
+      runner.script = (arguments) {
+        expect(arguments, ['git', '-C', root.path, 'fetch']);
+        return _processResult('done');
+      };
+      final executor = GitActionExecutor(processRunner: runner.call);
+
+      final result = await executor.execute(
+        const GitActionProposal(type: GitActionType.fetch),
+        root,
+      );
+
+      expect(result, 'done');
+    });
+
+    test('criar e trocar branch validam a ref antes do processo', () async {
+      final seen = <List<String>>[];
+      runner.script = (arguments) {
+        seen.add(arguments);
+        return _processResult('');
+      };
+      final executor = GitActionExecutor(processRunner: runner.call);
+
+      await executor.execute(
+        const GitActionProposal(
+          type: GitActionType.createBranch,
+          refName: 'feature/x-1',
+        ),
+        root,
+      );
+      await executor.execute(
+        const GitActionProposal(
+          type: GitActionType.checkoutBranch,
+          refName: 'main',
+        ),
+        root,
+      );
+
+      expect(seen[0], [
+        'git',
+        '-C',
+        root.path,
+        'checkout',
+        '-b',
+        'feature/x-1',
+      ]);
+      expect(seen[1], ['git', '-C', root.path, 'checkout', 'main']);
+    });
+
+    test('stage e unstage passam apenas caminhos validos', () async {
+      final seen = <List<String>>[];
+      runner.script = (arguments) {
+        seen.add(arguments);
+        return _processResult('');
+      };
+      final executor = GitActionExecutor(processRunner: runner.call);
+
+      await executor.execute(
+        const GitActionProposal(
+          type: GitActionType.stage,
+          paths: ['src/a.dart', 'README.md'],
+        ),
+        root,
+      );
+      await executor.execute(
+        const GitActionProposal(
+          type: GitActionType.unstage,
+          paths: ['src/a.dart'],
+        ),
+        root,
+      );
+
+      expect(seen[0], [
+        'git',
+        '-C',
+        root.path,
+        'add',
+        'src/a.dart',
+        'README.md',
+      ]);
+      expect(seen[1], [
+        'git',
+        '-C',
+        root.path,
+        'restore',
+        '--staged',
+        'src/a.dart',
+      ]);
+    });
+
+    test(
+      'commit e merge passam mensagem e ref sem flags destrutivas',
+      () async {
+        final seen = <List<String>>[];
+        runner.script = (arguments) {
+          seen.add(arguments);
+          return _processResult('');
+        };
+        final executor = GitActionExecutor(processRunner: runner.call);
+
+        await executor.execute(
+          const GitActionProposal(
+            type: GitActionType.commit,
+            message: 'feat: ajusta indices',
+          ),
+          root,
+        );
+        await executor.execute(
+          const GitActionProposal(
+            type: GitActionType.merge,
+            refName: 'feature',
+          ),
+          root,
+        );
+        await executor.execute(
+          const GitActionProposal(type: GitActionType.rebase, refName: 'main'),
+          root,
+        );
+
+        expect(seen[0], [
+          'git',
+          '-C',
+          root.path,
+          'commit',
+          '-m',
+          'feat: ajusta indices',
+        ]);
+        expect(seen[1], [
+          'git',
+          '-C',
+          root.path,
+          'merge',
+          '--no-edit',
+          'feature',
+        ]);
+        expect(seen[2], ['git', '-C', root.path, 'rebase', 'main']);
+      },
+    );
+
+    test('rejeita ref com opcao, .. ou @{', () async {
+      final executor = GitActionExecutor(processRunner: runner.call);
+      for (final ref in ['--hard', 'a..b', 'feature@{1}', '-x', 'com espaco']) {
+        await expectLater(
+          executor.execute(
+            GitActionProposal(type: GitActionType.checkoutBranch, refName: ref),
+            root,
+          ),
+          throwsA(isA<GitException>()),
+          reason: 'ref invalida: $ref',
+        );
+      }
+      expect(runner.calls, isEmpty);
+    });
+
+    test('rejeita caminho absoluto, com .. ou opcao', () async {
+      final executor = GitActionExecutor(processRunner: runner.call);
+      for (final path in ['/etc/passwd', '../fora.txt', '-p']) {
+        await expectLater(
+          executor.execute(
+            GitActionProposal(type: GitActionType.stage, paths: [path]),
+            root,
+          ),
+          throwsA(isA<GitException>()),
+          reason: 'caminho invalido: $path',
+        );
+      }
+      expect(runner.calls, isEmpty);
+    });
+
+    test('rejeita mensagem de commit vazia', () async {
+      final executor = GitActionExecutor(processRunner: runner.call);
+
+      await expectLater(
+        executor.execute(
+          const GitActionProposal(type: GitActionType.commit, message: '  '),
+          root,
+        ),
+        throwsA(isA<GitException>()),
+      );
+      expect(runner.calls, isEmpty);
+    });
+
+    test('rejeita ref vazia em criar/trocar/merge/rebase', () async {
+      final executor = GitActionExecutor(processRunner: runner.call);
+      for (final type in [
+        GitActionType.createBranch,
+        GitActionType.checkoutBranch,
+        GitActionType.merge,
+        GitActionType.rebase,
+      ]) {
+        await expectLater(
+          executor.execute(GitActionProposal(type: type), root),
+          throwsA(isA<GitException>()),
+        );
+      }
+      expect(runner.calls, isEmpty);
+    });
+
+    test('falha de processo vira GitException com a saida', () async {
+      runner.script = (arguments) =>
+          _emptyResult(exitCode: 1, stderr: 'fatal: conflito no merge');
+      final executor = GitActionExecutor(processRunner: runner.call);
+
+      await expectLater(
+        executor.execute(
+          const GitActionProposal(type: GitActionType.merge, refName: 'x'),
+          root,
+        ),
+        throwsA(
+          isA<GitException>().having(
+            (error) => error.message,
+            'message',
+            contains('conflito'),
+          ),
+        ),
+      );
+    });
+  });
 }
 
 ProcessResult _processResult(

@@ -9,6 +9,8 @@ class FakeGitRepository implements GitRepository {
   int loadCallCount = 0;
   Result<GitSnapshot>? nextResult;
   GitCommitPage? nextPage;
+  Result<String>? nextActionResult;
+  final List<GitActionProposal> executedActions = [];
   final List<Completer<Result<GitSnapshot>>> pending = [];
 
   @override
@@ -39,6 +41,18 @@ class FakeGitRepository implements GitRepository {
       return const Result.ok(GitCommitPage(commits: [], hasMore: false));
     }
     return Result.ok(page);
+  }
+
+  @override
+  Future<Result<String>> executeAction({
+    required Directory root,
+    required GitActionProposal proposal,
+  }) async {
+    executedActions.add(proposal);
+    final queued = nextActionResult;
+    nextActionResult = null;
+    if (queued != null) return queued;
+    return const Result.ok('OK: acao executada');
   }
 
   /// Completa a requisicao mais antiga pendente com [result], mantendo as

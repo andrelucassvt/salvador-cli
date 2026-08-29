@@ -143,6 +143,327 @@ class GitCommitPage {
   final bool hasMore;
 }
 
+/// Tipos de acao Git representaiveis na primeira versao. Operacoes
+/// destrutivas (reset --hard, clean, delete branch, push e qualquer variante
+/// de force) nao existem neste enum e nao podem ser representadas.
+enum GitActionType {
+  fetch,
+  createBranch,
+  checkoutBranch,
+  stage,
+  unstage,
+  commit,
+  merge,
+  rebase;
+
+  String get label => switch (this) {
+    GitActionType.fetch => 'fetch',
+    GitActionType.createBranch => 'criar branch',
+    GitActionType.checkoutBranch => 'trocar branch',
+    GitActionType.stage => 'stage',
+    GitActionType.unstage => 'unstage',
+    GitActionType.commit => 'commit',
+    GitActionType.merge => 'merge',
+    GitActionType.rebase => 'rebase',
+  };
+}
+
+/// Proposta tipada de mutacao Git: nunca executa durante o tool call da LLM;
+/// so o app a executa apos revisao explicita.
+class GitActionProposal {
+  const GitActionProposal({
+    required this.type,
+    this.refName,
+    this.paths = const [],
+    this.message,
+  });
+
+  final GitActionType type;
+  final String? refName;
+  final List<String> paths;
+  final String? message;
+
+  String get summary {
+    final base = type.label;
+    return switch (type) {
+      GitActionType.fetch => 'fetch',
+      GitActionType.createBranch ||
+      GitActionType.checkoutBranch ||
+      GitActionType.merge ||
+      GitActionType.rebase => '$base $refName',
+      GitActionType.stage ||
+      GitActionType.unstage => '$base: ${paths.join(', ')}',
+      GitActionType.commit => 'commit: ${_shortMessage(message ?? '')}',
+    };
+  }
+
+  static String _shortMessage(String message) {
+    final single = message.split('\n').first.trim();
+    return single.length > 60 ? '${single.substring(0, 60)}…' : single;
+  }
+
+  static bool _listEquals(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var index = 0; index < a.length; index++) {
+      if (a[index] != b[index]) return false;
+    }
+    return true;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is GitActionProposal &&
+      other.type == type &&
+      other.refName == refName &&
+      _listEquals(other.paths, paths) &&
+      other.message == message;
+
+  @override
+  int get hashCode =>
+      Object.hash(type, refName, Object.hashAll(paths), message);
+
+  @override
+  String toString() => 'GitActionProposal($summary)';
+}
+
+/// Executa somente as variantes permitidas de [GitActionProposal] com
+/// argumentos fixos e validados, sem shell e sem interpolacao de usuario.
+class GitActionExecutor {
+  GitActionExecutor({
+    GitProcessRunner? processRunner,
+    this.timeout = const Duration(seconds: 30),
+  }) : _processRunner = processRunner ?? _defaultRunner;
+
+  static const _maxMessageLength = 2000;
+  static const _maxPaths = 50;
+  static final RegExp _validRef = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._/-]*$');
+
+  final GitProcessRunner _processRunner;
+  final Duration timeout;
+
+  /// Valida a proposta (refs, caminhos e mensagem) sem executar nenhum
+  /// processo. Usado pela ferramenta `propose_git_action` para que a LLM
+  /// corrija argumentos antes da revisao.
+  void validate(GitActionProposal proposal, Directory root) {
+    _argumentsFor(proposal, root);
+  }
+
+  Future<String> execute(GitActionProposal proposal, Directory root) async {
+    final arguments = _argumentsFor(proposal, root);
+    final ProcessResult result;
+    try {
+      result = await _processRunner('git', [
+        '-C',
+        root.path,
+        ...arguments,
+      ]).timeout(timeout);
+    } on TimeoutException {
+      throw const GitException('git excedeu o limite de tempo.');
+    } on ProcessException catch (error) {
+      throw GitException(
+        'Nao foi possivel executar git: ${error.message}',
+        cause: error,
+      );
+    }
+    if (result.exitCode != 0) {
+      final details = ((result.stderr as String?) ?? '').trim();
+      throw GitException(
+        details.isNotEmpty
+            ? details
+            : 'git ${arguments.first} terminou com codigo ${result.exitCode}',
+      );
+    }
+    final output = ((result.stdout as String?) ?? '').trim();
+    return output.isEmpty ? 'OK: ${proposal.summary} executado' : output;
+  }
+
+  List<String> _argumentsFor(GitActionProposal proposal, Directory root) {
+    switch (proposal.type) {
+      case GitActionType.fetch:
+        return const ['fetch'];
+      case GitActionType.createBranch:
+        return ['checkout', '-b', _validatedRef(proposal.refName)];
+      case GitActionType.checkoutBranch:
+        return ['checkout', _validatedRef(proposal.refName)];
+      case GitActionType.stage:
+        return ['add', ..._validatedPaths(proposal.paths, root)];
+      case GitActionType.unstage:
+        return [
+          'restore',
+          '--staged',
+          ..._validatedPaths(proposal.paths, root),
+        ];
+      case GitActionType.commit:
+        return ['commit', '-m', _validatedMessage(proposal.message)];
+      case GitActionType.merge:
+        return ['merge', '--no-edit', _validatedRef(proposal.refName)];
+      case GitActionType.rebase:
+        return ['rebase', _validatedRef(proposal.refName)];
+    }
+  }
+
+  static String _validatedRef(String? refName) {
+    final ref = refName?.trim() ?? '';
+    if (ref.isEmpty) {
+      throw const GitException('ref nao informada.');
+    }
+    if (!_validRef.hasMatch(ref) || ref.contains('..') || ref.contains('@{')) {
+      throw GitException('ref invalida: $ref');
+    }
+    return ref;
+  }
+
+  static List<String> _validatedPaths(List<String> paths, Directory root) {
+    if (paths.isEmpty) {
+      throw const GitException('nenhum caminho informado.');
+    }
+    if (paths.length > _maxPaths) {
+      throw const GitException('numero maximo de caminhos excedido.');
+    }
+    final resolvedRoot = _resolveRoot(root);
+    for (final path in paths) {
+      if (path.isEmpty) throw const GitException('caminho vazio.');
+      if (path.startsWith('-') ||
+          path.startsWith('/') ||
+          _isAbsoluteWindows(path)) {
+        throw GitException('caminho invalido: $path');
+      }
+      if (path.split('/').contains('..')) {
+        throw GitException('caminho fora da raiz: $path');
+      }
+      final resolved = root.uri.resolveUri(Uri(path: path)).toFilePath();
+      if (resolved != resolvedRoot &&
+          !resolved.startsWith('$resolvedRoot${Platform.pathSeparator}')) {
+        throw GitException('caminho fora da raiz: $path');
+      }
+    }
+    return paths;
+  }
+
+  static bool _isAbsoluteWindows(String path) =>
+      path.length >= 3 && RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path);
+
+  static String _validatedMessage(String? message) {
+    final trimmed = message?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      throw const GitException('mensagem de commit vazia.');
+    }
+    if (trimmed.length > _maxMessageLength) {
+      throw const GitException('mensagem de commit muito longa.');
+    }
+    return trimmed;
+  }
+
+  static String _resolveRoot(Directory root) {
+    try {
+      return root.resolveSymbolicLinksSync();
+    } on FileSystemException {
+      return root.absolute.path;
+    }
+  }
+
+  static Future<ProcessResult> _defaultRunner(
+    String executable,
+    List<String> arguments,
+  ) => Process.run(executable, arguments, runInShell: false);
+}
+
+/// Serializa o contexto Git limitado para o prompt do assistente: branch,
+/// estado, refs, commits, worktree e a selecao atual, com marcadores de
+/// truncamento explicito. Nunca despeja o snapshot inteiro.
+String serializeGitContext(
+  GitSnapshot snapshot, {
+  String? selectedRef,
+  String? selectedCommitHash,
+  String? selectedFilePath,
+  int maxRefs = 30,
+  int maxCommits = 30,
+  int maxWorktree = 30,
+  int maxBodyLength = 400,
+  int maxFiles = 20,
+}) {
+  final repository = snapshot.repository;
+  final buffer = StringBuffer()
+    ..writeln(
+      'Branch: ${repository.branch ?? 'HEAD desanexado'} '
+      '(HEAD ${repository.headOid == null ? 'n/d' : repository.headOid!.substring(0, 7)})',
+    )
+    ..writeln(
+      'Estado: ${snapshot.clean ? 'limpo' : 'sujo'}'
+      ' | ahead ${snapshot.ahead}, behind ${snapshot.behind}'
+      '${snapshot.upstream == null ? '' : ' | upstream ${snapshot.upstream}'}',
+    );
+
+  final refs = <String, List<GitRef>>{
+    'Branches locais': snapshot.localBranches,
+    'Branches remotas': snapshot.remoteBranches,
+    'Tags': snapshot.tags,
+  };
+  for (final entry in refs.entries) {
+    final names = entry.value.map((ref) => ref.shortName);
+    final shown = names.take(maxRefs).toList();
+    buffer.writeln(
+      '${entry.key} (${entry.value.length}): ${shown.isEmpty ? 'nenhuma' : shown.join(', ')}'
+      '${entry.value.length > maxRefs ? ' [... mais ${entry.value.length - maxRefs}]' : ''}',
+    );
+  }
+  buffer.writeln('Stashes: ${snapshot.stashCount}');
+
+  final commits = snapshot.commits;
+  buffer.writeln('Commits (mais recentes, ${commits.length}):');
+  final shownCommits = commits.take(maxCommits);
+  for (final commit in shownCommits) {
+    buffer.writeln(
+      '- ${commit.shortHash} ${commit.subject}'
+      '${commit.isMerge ? ' [merge de ${commit.parentHashes.length}]' : ''}',
+    );
+  }
+  if (commits.length > maxCommits) {
+    buffer.writeln('[... mais ${commits.length - maxCommits}]');
+  }
+
+  final worktree = snapshot.worktree;
+  buffer.writeln('Alteracoes locais (${worktree.length}):');
+  for (final entry in worktree.take(maxWorktree)) {
+    buffer.writeln('- [${entry.status.name}] ${entry.path}');
+  }
+  if (worktree.length > maxWorktree) {
+    buffer.writeln('[... mais ${worktree.length - maxWorktree}]');
+  }
+
+  if (selectedRef != null ||
+      selectedCommitHash != null ||
+      selectedFilePath != null) {
+    buffer.writeln('Selecao:');
+    if (selectedRef != null) buffer.writeln('- ref: $selectedRef');
+    if (selectedFilePath != null) {
+      for (final entry in worktree) {
+        if (entry.path == selectedFilePath) {
+          buffer.writeln('- arquivo: ${entry.path} [${entry.status.name}]');
+        }
+      }
+    }
+    if (selectedCommitHash != null) {
+      for (final commit in commits) {
+        if (commit.hash == selectedCommitHash) {
+          buffer.writeln('- commit: ${commit.shortHash} ${commit.subject}');
+          final body = commit.body;
+          if (body.isNotEmpty) {
+            buffer.writeln(
+              '  corpo: ${body.length > maxBodyLength ? '${body.substring(0, maxBodyLength)} [TRUNCADO]' : body}',
+            );
+          }
+          buffer.writeln(
+            '  arquivos: ${commit.files.take(maxFiles).map((file) => '${file.status} ${file.path}').join(', ')}'
+            '${commit.files.length > maxFiles ? ' [... mais ${commit.files.length - maxFiles}]' : ''}',
+          );
+        }
+      }
+    }
+  }
+  return buffer.toString();
+}
+
 /// Snapshot somente leitura de um repositorio Git na raiz vinculada.
 class GitSnapshot {
   const GitSnapshot({
@@ -339,6 +660,16 @@ class GitClient {
     }
     final log = await _loadLog(root, skip: skip, count: count);
     return GitCommitPage(commits: log.commits, hasMore: log.truncated);
+  }
+
+  /// Executa um comando git somente leitura com argumentos fixos e retorna o
+  /// stdout; exit code diferente de zero vira [GitException].
+  Future<String> runReadOnly(Directory root, List<String> arguments) async {
+    final result = await _run(root, arguments);
+    if (result.exitCode != 0) {
+      throw GitException(_failureMessage('git ${arguments.first}', result));
+    }
+    return (result.stdout as String?) ?? '';
   }
 
   Future<({List<GitCommit> commits, bool truncated})> _loadLog(

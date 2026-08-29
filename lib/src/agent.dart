@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'context_files.dart';
 import 'file_mentions.dart';
+import 'git.dart';
 import 'models.dart';
 import 'ollama_client.dart';
 import 'prompt.dart';
@@ -17,29 +18,42 @@ class AgentSession {
     this.maxToolRounds = 8,
     this.onToolCall,
     this.onToolResult,
+    this.onProposal,
     AgentPermissions permissions = const AgentPermissions(),
     ContextFilesService? contextFiles,
-  }) : _tools = ToolRegistry(
-         root,
-         permissions: permissions,
-         contextFiles: contextFiles,
-       ),
-       _mentions = root == null ? null : FileMentionService(root),
+    GitClient? gitClient,
+    GitProfile? gitProfile,
+  }) : _mentions = root == null ? null : FileMentionService(root),
        _systemMessage = AgentMessage(
          role: 'system',
          content: _systemContent(root, contextFiles),
        ) {
+    _tools = ToolRegistry(
+      root,
+      permissions: permissions,
+      contextFiles: contextFiles,
+      gitClient: gitClient,
+      gitProfile: gitProfile,
+      onProposal: _collectProposal,
+    );
     clear();
   }
 
   final ChatClient client;
-  final ToolRegistry _tools;
+  late final ToolRegistry _tools;
   final FileMentionService? _mentions;
   final AgentMessage _systemMessage;
   final int maxToolRounds;
   final ToolCallObserver? onToolCall;
   final ToolResultObserver? onToolResult;
+  final void Function(GitActionProposal)? onProposal;
   final List<AgentMessage> _messages = [];
+  final List<GitActionProposal> _turnProposals = [];
+
+  void _collectProposal(GitActionProposal proposal) {
+    _turnProposals.add(proposal);
+    onProposal?.call(proposal);
+  }
 
   static String _systemContent(
     Directory? root,
@@ -68,6 +82,7 @@ class AgentSession {
     if (input.trim().isEmpty && images.isEmpty) {
       return const AgentTurnResult(answer: '');
     }
+    _turnProposals.clear();
     final expansion =
         _mentions?.expand(input) ?? MentionExpansion(prompt: input);
     _messages.add(
@@ -94,6 +109,7 @@ class AgentSession {
           metrics: combinedMetrics,
           mentionedFiles: expansion.files,
           warnings: expansion.warnings,
+          proposals: List.unmodifiable(_turnProposals),
         );
       }
       if (round == maxToolRounds) {
@@ -122,12 +138,16 @@ class AgentTurnResult {
     this.metrics,
     this.mentionedFiles = const [],
     this.warnings = const [],
+    this.proposals = const [],
   });
 
   final String answer;
   final InferenceMetrics? metrics;
   final List<String> mentionedFiles;
   final List<String> warnings;
+
+  /// Propostas de acao Git acumuladas no turno; nenhuma foi executada.
+  final List<GitActionProposal> proposals;
 }
 
 class AgentException implements Exception {

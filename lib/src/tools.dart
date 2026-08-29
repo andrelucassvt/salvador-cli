@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'context_files.dart';
+import 'git.dart';
 import 'models.dart';
 
 abstract interface class AgentTool {
@@ -32,11 +33,24 @@ class AgentPermissions {
   };
 }
 
+/// Perfil Git opcional de uma sessao: consultas estruturadas e propostas de
+/// acao no lugar de `run_command`. Quando ativo, comandos de shell nunca sao
+/// expostos, mesmo que as permissoes normais permitam.
+class GitProfile {
+  const GitProfile({this.queriesEnabled = true, this.proposalsEnabled = true});
+
+  final bool queriesEnabled;
+  final bool proposalsEnabled;
+}
+
 class ToolRegistry {
   ToolRegistry(
     Directory? root, {
     AgentPermissions permissions = const AgentPermissions(),
     ContextFilesService? contextFiles,
+    GitClient? gitClient,
+    GitProfile? gitProfile,
+    void Function(GitActionProposal)? onProposal,
   }) : _permissions = permissions,
        _tools = root == null
            ? const []
@@ -45,7 +59,18 @@ class ToolRegistry {
                if (contextFiles != null) UseSkillTool(root, contextFiles),
                if (permissions.allowEdit) WriteFileTool(root),
                if (permissions.allowEdit) ReplaceInFileTool(root),
-               if (permissions.allowCommands) RunCommandTool(root),
+               if (gitProfile == null && permissions.allowCommands)
+                 RunCommandTool(root),
+               if (gitClient != null && gitProfile != null) ...[
+                 if (gitProfile.queriesEnabled) ...[
+                   GitStatusTool(root, gitClient),
+                   GitLogTool(root, gitClient),
+                   GitDiffTool(root, gitClient),
+                   GitShowTool(root, gitClient),
+                 ],
+                 if (gitProfile.proposalsEnabled)
+                   ProposeGitActionTool(root, onProposal),
+               ],
              ];
 
   final AgentPermissions _permissions;
@@ -68,6 +93,8 @@ class ToolRegistry {
     try {
       return await tool.single.execute(call.arguments);
     } on ToolException catch (error) {
+      return 'ERRO: ${error.message}';
+    } on GitException catch (error) {
       return 'ERRO: ${error.message}';
     } on FileSystemException catch (error) {
       return 'ERRO: ${error.message}';
@@ -337,4 +364,247 @@ class ToolException implements Exception {
   const ToolException(this.message);
 
   final String message;
+}
+
+/// Base das consultas Git: compartilha o [GitClient] e o limite de saida.
+abstract class GitQueryTool extends WorkspaceTool {
+  GitQueryTool(super.root, this.client);
+
+  static const maxOutput = 6000;
+
+  final GitClient client;
+
+  void _validatePath(String path) {
+    if (path.isEmpty ||
+        path.startsWith('-') ||
+        path.startsWith('/') ||
+        path.split('/').contains('..')) {
+      throw const ToolException('caminho invalido');
+    }
+    final candidateUri = root.uri.resolveUri(Uri(path: path));
+    if (candidateUri.scheme != 'file') {
+      throw const ToolException('caminho invalido');
+    }
+    _ensureInside(candidateUri.toFilePath());
+  }
+
+  String truncate(String output) => output.length <= maxOutput
+      ? output
+      : '${output.substring(0, maxOutput)}\n[TRUNCADO]';
+}
+
+/// Resumo estruturado do repositorio para o assistente Git.
+class GitStatusTool extends GitQueryTool {
+  GitStatusTool(super.root, super.client);
+
+  @override
+  ToolDefinition get definition => const ToolDefinition(
+    name: 'git_status',
+    description:
+        'Resumo estruturado do repositorio: branch, estado '
+        'sujo/limpo, ahead/behind, upstream, refs, stashes e alteracoes '
+        'locais.',
+    properties: {},
+  );
+
+  @override
+  Future<String> execute(Map<String, Object?> arguments) async {
+    final snapshot = await client.loadSnapshot(root);
+    if (!snapshot.repository.isValid) {
+      return 'ERRO: repositorio invalido para esta raiz';
+    }
+    return truncate(serializeGitContext(snapshot, maxCommits: 0));
+  }
+}
+
+/// Ultimos commits do repositorio.
+class GitLogTool extends GitQueryTool {
+  GitLogTool(super.root, super.client);
+
+  @override
+  ToolDefinition get definition => const ToolDefinition(
+    name: 'git_log',
+    description: 'Lista os commits mais recentes com hash curto e assunto.',
+    properties: {
+      'count': {
+        'type': 'integer',
+        'description': 'Quantidade de commits (maximo 30, padrao 10)',
+      },
+    },
+  );
+
+  @override
+  Future<String> execute(Map<String, Object?> arguments) async {
+    final rawCount = arguments['count'];
+    final count = rawCount is num ? rawCount.toInt().clamp(1, 30) : 10;
+    final snapshot = await client.loadSnapshot(root, maxCommits: count);
+    if (!snapshot.repository.isValid) {
+      return 'ERRO: repositorio invalido para esta raiz';
+    }
+    final buffer = StringBuffer()
+      ..writeln('Commits (${snapshot.commits.length}):');
+    for (final commit in snapshot.commits) {
+      buffer.writeln(
+        '- ${commit.shortHash} ${commit.subject}'
+        '${commit.isMerge ? ' [merge]' : ''}',
+      );
+    }
+    if (snapshot.commitsTruncated) buffer.writeln('[TRUNCADO]');
+    return buffer.toString();
+  }
+}
+
+/// Diff atual de um arquivo do worktree.
+class GitDiffTool extends GitQueryTool {
+  GitDiffTool(super.root, super.client);
+
+  @override
+  ToolDefinition get definition => const ToolDefinition(
+    name: 'git_diff',
+    description:
+        'Mostra o diff de um arquivo do worktree contra o HEAD '
+        '(ate 6000 caracteres).',
+    properties: {
+      'path': {'type': 'string', 'description': 'Caminho relativo'},
+    },
+    required: ['path'],
+  );
+
+  @override
+  Future<String> execute(Map<String, Object?> arguments) async {
+    final path = requiredString(arguments, 'path');
+    _validatePath(path);
+    final output = await client.runReadOnly(root, ['diff', 'HEAD', '--', path]);
+    return truncate(output);
+  }
+}
+
+/// Detalhes e estatisticas de um commit.
+class GitShowTool extends GitQueryTool {
+  GitShowTool(super.root, super.client);
+
+  static final RegExp _commitRef = RegExp(r'^(HEAD|[0-9a-fA-F]{7,40})$');
+
+  @override
+  ToolDefinition get definition => const ToolDefinition(
+    name: 'git_show',
+    description:
+        'Mostra o assunto, autor e estatisticas de um commit '
+        '(ate 6000 caracteres).',
+    properties: {
+      'commit': {
+        'type': 'string',
+        'description': 'Hash curto/completo ou HEAD',
+      },
+    },
+    required: ['commit'],
+  );
+
+  @override
+  Future<String> execute(Map<String, Object?> arguments) async {
+    final commit = requiredString(arguments, 'commit').trim();
+    if (!_commitRef.hasMatch(commit)) {
+      throw ToolException('commit invalido: $commit');
+    }
+    final output = await client.runReadOnly(root, [
+      'show',
+      '--stat',
+      '--format=commit %H%nAutor: %an <%ae>%nData: %aI%n%n%s%n%n%b',
+      commit,
+    ]);
+    return truncate(output);
+  }
+}
+
+/// Propoe uma mutacao Git sem executar nada: acumula [GitActionProposal] para
+/// a interface aprovar.
+class ProposeGitActionTool extends WorkspaceTool {
+  ProposeGitActionTool(super.root, this.onProposal);
+
+  final void Function(GitActionProposal)? onProposal;
+  final GitActionExecutor _validator = GitActionExecutor();
+
+  @override
+  ToolDefinition get definition => const ToolDefinition(
+    name: 'propose_git_action',
+    description:
+        'Propoe uma mutacao Git (fetch, criar/trocar branch, stage, '
+        'unstage, commit, merge, rebase) para aprovacao na interface. '
+        'Nenhuma acao executa sem confirmacao.',
+    properties: {
+      'type': {
+        'type': 'string',
+        'description':
+            'Tipo: fetch, createBranch, checkoutBranch, stage, '
+            'unstage, commit, merge ou rebase',
+      },
+      'ref': {
+        'type': 'string',
+        'description': 'Branch alvo (create/checkout/merge/rebase)',
+      },
+      'paths': {
+        'type': 'array',
+        'items': {'type': 'string'},
+        'description': 'Caminhos relativos (stage/unstage)',
+      },
+      'message': {'type': 'string', 'description': 'Mensagem do commit'},
+    },
+    required: ['type'],
+  );
+
+  @override
+  Future<String> execute(Map<String, Object?> arguments) async {
+    final typeName = requiredString(arguments, 'type');
+    GitActionType? type;
+    for (final candidate in GitActionType.values) {
+      if (candidate.name == typeName) type = candidate;
+    }
+    if (type == null) {
+      throw ToolException('tipo de acao invalido: $typeName');
+    }
+
+    final rawRef = arguments['ref'];
+    if (rawRef != null && rawRef is! String) {
+      throw const ToolException('argumento "ref" deve ser uma string');
+    }
+    final rawMessage = arguments['message'];
+    if (rawMessage != null && rawMessage is! String) {
+      throw const ToolException('argumento "message" deve ser uma string');
+    }
+    final rawPaths = arguments['paths'];
+    final paths = <String>[];
+    if (rawPaths != null) {
+      if (rawPaths is! List) {
+        throw const ToolException('argumento "paths" deve ser uma lista');
+      }
+      for (final path in rawPaths) {
+        if (path is! String) {
+          throw const ToolException('caminho invalido em "paths"');
+        }
+        paths.add(path);
+      }
+    }
+
+    final proposal = GitActionProposal(
+      type: type,
+      refName: switch (type) {
+        GitActionType.createBranch ||
+        GitActionType.checkoutBranch ||
+        GitActionType.merge ||
+        GitActionType.rebase => rawRef as String?,
+        _ => null,
+      },
+      paths: switch (type) {
+        GitActionType.stage || GitActionType.unstage => paths,
+        _ => const [],
+      },
+      message: type == GitActionType.commit ? rawMessage as String? : null,
+    );
+
+    // Valida sem executar: a LLM recebe ERRO e pode corrigir os argumentos.
+    _validator.validate(proposal, root);
+    onProposal?.call(proposal);
+    return 'Proposta registrada: ${proposal.summary}. '
+        'Aguardando aprovacao na interface.';
+  }
 }

@@ -7,10 +7,15 @@ import 'package:salvador_cli/salvador_cli.dart';
 import 'package:salvador_desktop/config/error/app_exception.dart';
 import 'package:salvador_desktop/config/error/result_pattern.dart';
 import 'package:salvador_desktop/presentation/desktop/content/git_workspace.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/git_assistant_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/git_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/git_state.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/workspace_cubit.dart';
 
+import 'fakes/fake_desktop_storage_service.dart';
+import 'fakes/fake_git_assistant_repository.dart';
 import 'fakes/fake_git_repository.dart';
+import 'fakes/fake_ollama_repository.dart';
 
 void main() {
   late FakeGitRepository fakeRepository;
@@ -86,25 +91,38 @@ void main() {
     return cubit;
   }
 
-  Future<void> pumpWorkspace(
+  Future<GitAssistantCubit> pumpWorkspace(
     WidgetTester tester, {
     required GitCubit target,
+    FakeGitAssistantRepository? assistantRepository,
     Size size = const Size(1100, 720),
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
+    final assistant = assistantRepository ?? FakeGitAssistantRepository();
+    final assistantCubit = GitAssistantCubit(assistant)..updateReadiness(true);
+    final workspace = WorkspaceCubit(
+      FakeOllamaRepository(),
+      FakeDesktopStorageService(),
+      initialRoot: root,
+    );
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: BlocProvider<GitCubit>.value(
-            value: target,
+          body: MultiBlocProvider(
+            providers: [
+              BlocProvider<GitCubit>.value(value: target),
+              BlocProvider<GitAssistantCubit>.value(value: assistantCubit),
+              BlocProvider<WorkspaceCubit>.value(value: workspace),
+            ],
             child: const GitWorkspace(),
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
+    return assistantCubit;
   }
 
   group('GitWorkspace valido', () {
@@ -311,5 +329,241 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+  });
+
+  group('GitWorkspace assistente', () {
+    testWidgets('Pedir ao Salvador abre o drawer com chips da selecao', (
+      tester,
+    ) async {
+      final target = await loadValid();
+      await pumpWorkspace(tester, target: target);
+
+      expect(find.byKey(const Key('git-assistant-drawer')), findsNothing);
+
+      await tester.tap(find.byKey(const Key('git-ask-assistant-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('git-assistant-drawer')), findsOneWidget);
+      expect(find.byKey(const Key('git-assistant-chips')), findsOneWidget);
+      expect(find.text('main'), findsWidgets);
+
+      await tester.tap(find.byKey(const Key('git-assistant-close')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('git-assistant-drawer')), findsNothing);
+    });
+
+    testWidgets('abrir o drawer preserva a selecao de commit', (tester) async {
+      final target = await loadValid();
+      await pumpWorkspace(tester, target: target);
+
+      await tester.tap(find.byKey(const Key('git-commit-row-b111111')));
+      await tester.pumpAndSettle();
+      expect((target.state as GitLoaded).selectedCommitHash, middleHash);
+
+      await tester.tap(find.byKey(const Key('git-ask-assistant-button')));
+      await tester.pumpAndSettle();
+
+      expect((target.state as GitLoaded).selectedCommitHash, middleHash);
+      expect(find.byKey(const Key('git-assistant-drawer')), findsOneWidget);
+      expect(find.text('b111111'), findsWidgets);
+    });
+
+    testWidgets('envio inclui so o contexto da selecao atual', (tester) async {
+      final assistant = FakeGitAssistantRepository();
+      final target = await loadValid();
+      await pumpWorkspace(
+        tester,
+        target: target,
+        assistantRepository: assistant,
+      );
+
+      await tester.tap(find.byKey(const Key('git-commit-row-b111111')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('git-ask-assistant-button')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('git-assistant-field')),
+        'explique este commit',
+      );
+      await tester.tap(find.byKey(const Key('git-assistant-send')));
+      await tester.pumpAndSettle();
+
+      expect(assistant.lastContext, isNotNull);
+      expect(assistant.lastContext, contains('Branch: main'));
+      expect(assistant.lastContext, contains('Selecao:'));
+      expect(assistant.lastContext, contains('b111111'));
+    });
+
+    testWidgets('cancelar proposta nao executa nada', (tester) async {
+      final assistant = FakeGitAssistantRepository();
+      final target = await loadValid();
+      await pumpWorkspace(
+        tester,
+        target: target,
+        assistantRepository: assistant,
+      );
+
+      await tester.tap(find.byKey(const Key('git-ask-assistant-button')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('git-assistant-field')),
+        'faça um fetch',
+      );
+      await tester.tap(find.byKey(const Key('git-assistant-send')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('git-proposal-0')), findsOneWidget);
+      expect(fakeRepository.executedActions, isEmpty);
+
+      await tester.tap(find.byKey(const Key('git-cancel-proposal-0')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('git-proposal-0')), findsNothing);
+      expect(
+        fakeRepository.executedActions,
+        isEmpty,
+        reason: 'cancelar nunca chama execute',
+      );
+    });
+
+    testWidgets('confirmar proposta executa exatamente uma vez e recarrega', (
+      tester,
+    ) async {
+      final assistant = FakeGitAssistantRepository();
+      final target = await loadValid();
+      await pumpWorkspace(
+        tester,
+        target: target,
+        assistantRepository: assistant,
+      );
+
+      await tester.tap(find.byKey(const Key('git-ask-assistant-button')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('git-assistant-field')),
+        'proponha um fetch',
+      );
+      await tester.tap(find.byKey(const Key('git-assistant-send')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('git-review-proposal-0')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('git-action-review-dialog')), findsOneWidget);
+      expect(find.text('fetch'), findsWidgets);
+
+      final loadsBefore = fakeRepository.loadCallCount;
+      fakeRepository.nextResult = Result.ok(validSnapshot());
+      await tester.tap(find.byKey(const Key('git-dialog-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(fakeRepository.executedActions, hasLength(1));
+      expect(fakeRepository.executedActions.single.type, GitActionType.fetch);
+      expect(fakeRepository.loadCallCount, loadsBefore + 1);
+      expect(find.byKey(const Key('git-proposal-0')), findsNothing);
+      expect(find.byKey(const Key('git-action-review-dialog')), findsNothing);
+      expect(find.byKey(const Key('git-assistant-drawer')), findsOneWidget);
+      expect(find.byKey(const Key('git-branches-panel')), findsOneWidget);
+      expect(find.byKey(const Key('git-commit-graph')), findsOneWidget);
+      expect(find.byKey(const Key('git-worktree-panel')), findsOneWidget);
+    });
+
+    testWidgets('cancelar no dialogo nao executa', (tester) async {
+      final assistant = FakeGitAssistantRepository();
+      final target = await loadValid();
+      await pumpWorkspace(
+        tester,
+        target: target,
+        assistantRepository: assistant,
+      );
+
+      await tester.tap(find.byKey(const Key('git-ask-assistant-button')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('git-assistant-field')),
+        'proponha algo',
+      );
+      await tester.tap(find.byKey(const Key('git-assistant-send')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('git-review-proposal-0')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('git-dialog-cancel')));
+      await tester.pumpAndSettle();
+
+      expect(fakeRepository.executedActions, isEmpty);
+      expect(find.byKey(const Key('git-proposal-0')), findsOneWidget);
+    });
+
+    testWidgets('falha da acao mostra banner e mantem o assistente', (
+      tester,
+    ) async {
+      final assistant = FakeGitAssistantRepository();
+      final target = await loadValid();
+      await pumpWorkspace(
+        tester,
+        target: target,
+        assistantRepository: assistant,
+      );
+
+      await tester.tap(find.byKey(const Key('git-ask-assistant-button')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('git-assistant-field')),
+        'proponha um fetch',
+      );
+      await tester.tap(find.byKey(const Key('git-assistant-send')));
+      await tester.pumpAndSettle();
+
+      fakeRepository.nextActionResult = const Result.error(
+        GitFailureException('sem rede'),
+      );
+      await tester.tap(find.byKey(const Key('git-review-proposal-0')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('git-dialog-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('git-action-error-banner')), findsOneWidget);
+      expect(find.textContaining('sem rede'), findsOneWidget);
+      expect(find.byKey(const Key('git-assistant-drawer')), findsOneWidget);
+      expect(find.byKey(const Key('git-proposal-0')), findsOneWidget);
+      expect((target.state as GitLoaded).snapshot.repository.branch, 'main');
+    });
+  });
+
+  group('GitWorkspace fetch', () {
+    testWidgets('Fetch abre revisao e cancelar nao executa', (tester) async {
+      final target = await loadValid();
+      await pumpWorkspace(tester, target: target);
+
+      await tester.tap(find.byKey(const Key('git-fetch-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('git-action-review-dialog')), findsOneWidget);
+      expect(find.textContaining('acesso a rede'), findsOneWidget);
+      expect(fakeRepository.executedActions, isEmpty);
+
+      await tester.tap(find.byKey(const Key('git-dialog-cancel')));
+      await tester.pumpAndSettle();
+
+      expect(fakeRepository.executedActions, isEmpty);
+      expect(find.byKey(const Key('git-action-review-dialog')), findsNothing);
+    });
+
+    testWidgets('Fetch confirmado executa uma vez e recarrega', (tester) async {
+      final target = await loadValid();
+      await pumpWorkspace(tester, target: target);
+
+      await tester.tap(find.byKey(const Key('git-fetch-button')));
+      await tester.pumpAndSettle();
+
+      final loadsBefore = fakeRepository.loadCallCount;
+      fakeRepository.nextResult = Result.ok(validSnapshot());
+      await tester.tap(find.byKey(const Key('git-dialog-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(fakeRepository.executedActions, hasLength(1));
+      expect(fakeRepository.executedActions.single.type, GitActionType.fetch);
+      expect(fakeRepository.loadCallCount, loadsBefore + 1);
+    });
   });
 }

@@ -21,7 +21,7 @@ O shell atual possui uma única área central de chat, um rail de atividade à e
 |---|---------|---------|-----------|-----------|--------|
 | 1 | `01-snapshot-e-entrada.md` | Núcleo Git somente leitura e entrada Chat/Git mostrando o resumo real do repositório | não — abre contratos consumidos pelas partes seguintes e altera o shell compartilhado | — | concluída — commit `3a01f23` |
 | 2 | `02-workspace-visual.md` | Navegador de refs, grafo interativo, inspector e alterações locais responsivas | não — sobrepõe `GitCubit`, `DesktopView` e os testes de shell usados na parte 3 | 1 | concluída — commit `4baf466` |
-| 3 | `03-assistente-e-acoes.md` | Assistente Git contextual, propostas aprováveis e ações locais tipadas com atualização dos flows | não — integra contratos do núcleo, sessão do agente, estado e UI no mesmo fluxo | 1 e 2 | pendente |
+| 3 | `03-assistente-e-acoes.md` | Assistente Git contextual, propostas aprováveis e ações locais tipadas com atualização dos flows | não — integra contratos do núcleo, sessão do agente, estado e UI no mesmo fluxo | 1 e 2 | concluída |
 
 ## Regras Transversais
 

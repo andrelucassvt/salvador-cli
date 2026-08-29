@@ -21,14 +21,16 @@ import 'package:salvador_desktop/domain/interfaces/ollama_repository.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/chat_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/chat_state.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/file_explorer_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/git_assistant_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/git_assistant_state.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/git_cubit.dart';
-
 import 'package:salvador_desktop/presentation/desktop/view_model/settings_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/settings_state.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/workspace_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/workspace_state.dart';
 import 'package:salvador_desktop/presentation/desktop/view/desktop_view.dart';
 
+import 'presentation/desktop/fakes/fake_git_assistant_repository.dart';
 import 'presentation/desktop/fakes/fake_git_repository.dart';
 
 /// Suíte de integração: registra Cubits reais no AppInjector, faking só a
@@ -100,12 +102,15 @@ void main() {
     final fileExplorerCubit = FileExplorerCubit(workspaceRepository);
     final gitRepository = FakeGitRepository();
     final gitCubit = GitCubit(gitRepository);
+    final gitAssistantRepository = FakeGitAssistantRepository();
+    final gitAssistantCubit = GitAssistantCubit(gitAssistantRepository);
 
     AppInjector.inject
       ..registerFactory<WorkspaceCubit>(() => workspaceCubit)
       ..registerFactory<ChatCubit>(() => chatCubit)
       ..registerFactory<FileExplorerCubit>(() => fileExplorerCubit)
       ..registerFactory<GitCubit>(() => gitCubit)
+      ..registerFactory<GitAssistantCubit>(() => gitAssistantCubit)
       ..registerFactoryParam<SettingsCubit, SettingsEditing, void>(
         (initial, _) => SettingsCubit(ollamaRepository, initial: initial),
       );
@@ -119,6 +124,8 @@ void main() {
       fileExplorerCubit: fileExplorerCubit,
       gitRepository: gitRepository,
       gitCubit: gitCubit,
+      gitAssistantRepository: gitAssistantRepository,
+      gitAssistantCubit: gitAssistantCubit,
     );
   }
 
@@ -716,6 +723,70 @@ void main() {
 
     expect(find.text('repositorio corrompido'), findsOneWidget);
   });
+
+  testWidgets('assistente Git mantem conversa independente do chat', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1100, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    final harness = await buildHarness(
+      tester,
+      initialPreferences: (root) =>
+          DesktopPreferencesEntity(activeRoot: root.path),
+    );
+    harness.gitRepository.nextResult = Result.ok(
+      GitSnapshot(
+        repository: const GitRepositoryState(
+          kind: GitRepositoryKind.valid,
+          topLevel: '/repo/raiz',
+          branch: 'main',
+          headOid: '6b8dc2efa9f5ff3a00f6262229969f841cefa6fc',
+        ),
+      ),
+    );
+    await pumpShell(tester);
+
+    await tester.enterText(
+      find.byKey(const Key('composer-field')),
+      'mensagem do chat',
+    );
+    await tester.tap(find.byKey(const Key('send-button')));
+    await tester.pumpAndSettle();
+    expect((harness.chatCubit.state as ChatIdle).messages, hasLength(2));
+
+    await tester.tap(find.byKey(const Key('git-navigation-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('git-ask-assistant-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('git-assistant-drawer')), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('git-assistant-field')),
+      'explique a branch',
+    );
+    await tester.tap(find.byKey(const Key('git-assistant-send')));
+    await tester.pumpAndSettle();
+
+    final assistantState = harness.gitAssistantCubit.state as GitAssistantIdle;
+    expect(assistantState.messages, hasLength(2));
+    expect(assistantState.messages.first.content, 'explique a branch');
+    expect(
+      find.text('explique a branch'),
+      findsOneWidget,
+      reason: 'a mensagem aparece no drawer, nao no chat',
+    );
+
+    await tester.tap(find.byKey(const Key('chat-navigation-button')));
+    await tester.pumpAndSettle();
+    expect((harness.chatCubit.state as ChatIdle).messages, hasLength(2));
+    expect(find.text('mensagem do chat'), findsWidgets);
+    expect(
+      find.text('explique a branch'),
+      findsNothing,
+      reason: 'a conversa Git nao aparece no chat principal',
+    );
+  });
 }
 
 Future<void> tapPreview(WidgetTester tester, Finder finder) async {
@@ -736,6 +807,8 @@ class _Harness {
     required this.fileExplorerCubit,
     required this.gitRepository,
     required this.gitCubit,
+    required this.gitAssistantRepository,
+    required this.gitAssistantCubit,
   });
 
   final Directory root;
@@ -746,6 +819,8 @@ class _Harness {
   final FileExplorerCubit fileExplorerCubit;
   final FakeGitRepository gitRepository;
   final GitCubit gitCubit;
+  final FakeGitAssistantRepository gitAssistantRepository;
+  final GitAssistantCubit gitAssistantCubit;
 }
 
 class _NoIoStore extends DesktopStorageService {

@@ -288,6 +288,116 @@ void main() {
       expect(File('${root.path}/ok.txt').readAsStringSync(), 'x');
     },
   );
+
+  group('perfil Git da sessao', () {
+    test('expoe consultas e propostas sem run_command', () async {
+      final client = FakeChatClient([
+        AgentMessage(role: 'assistant', content: 'ok'),
+      ]);
+      final session = AgentSession(
+        client: client,
+        root: root,
+        gitClient: GitClient(
+          processRunner: (executable, arguments) async =>
+              ProcessResult(0, 0, '', ''),
+        ),
+        gitProfile: const GitProfile(),
+        permissions: const AgentPermissions(allowCommands: true),
+      );
+
+      await session.send('oi');
+
+      final names = client.toolRequests.single
+          .map((tool) => tool.name)
+          .toList();
+      expect(names, contains('git_status'));
+      expect(names, contains('git_log'));
+      expect(names, contains('git_diff'));
+      expect(names, contains('git_show'));
+      expect(names, contains('propose_git_action'));
+      expect(
+        names,
+        isNot(contains('run_command')),
+        reason: 'o perfil Git nunca expoe shell, mesmo com allowCommands',
+      );
+    });
+
+    test('propose_git_action acumula proposta sem invocar o runner', () async {
+      final runnerCalls = <List<String>>[];
+      final client = FakeChatClient([
+        AgentMessage(
+          role: 'assistant',
+          toolCalls: [
+            ToolCall(
+              name: 'propose_git_action',
+              arguments: {
+                'type': 'commit',
+                'message': 'corrige o parser de status',
+              },
+            ),
+          ],
+        ),
+        AgentMessage(role: 'assistant', content: 'proposta registrada'),
+      ]);
+      final proposals = <GitActionProposal>[];
+      final session = AgentSession(
+        client: client,
+        root: root,
+        gitClient: GitClient(
+          processRunner: (executable, arguments) async {
+            runnerCalls.add(arguments);
+            return ProcessResult(0, 0, '', '');
+          },
+        ),
+        gitProfile: const GitProfile(),
+        onProposal: proposals.add,
+      );
+
+      final result = await session.sendDetailed('faça um commit');
+
+      expect(result.proposals, hasLength(1));
+      final proposal = result.proposals.single;
+      expect(proposal.type, GitActionType.commit);
+      expect(proposal.message, 'corrige o parser de status');
+      expect(proposals, hasLength(1));
+      expect(
+        runnerCalls,
+        isEmpty,
+        reason: 'nenhum processo git pode rodar por causa de uma proposta',
+      );
+      final toolMessage = client.requests.last
+          .where((message) => message.role == 'tool')
+          .single;
+      expect(toolMessage.content, contains('aprovacao'));
+    });
+
+    test(
+      'perfil Git respeita allowEdit para escrita durante conflitos',
+      () async {
+        final client = FakeChatClient([
+          AgentMessage(role: 'assistant', content: 'ok'),
+        ]);
+        final session = AgentSession(
+          client: client,
+          root: root,
+          gitClient: GitClient(
+            processRunner: (executable, arguments) async =>
+                ProcessResult(0, 0, '', ''),
+          ),
+          gitProfile: const GitProfile(),
+          permissions: const AgentPermissions(allowEdit: false),
+        );
+
+        await session.send('oi');
+
+        final names = client.toolRequests.single
+            .map((tool) => tool.name)
+            .toList();
+        expect(names, isNot(contains('write_file')));
+        expect(names, isNot(contains('replace_in_file')));
+      },
+    );
+  });
 }
 
 class FakeChatClient implements ChatClient {

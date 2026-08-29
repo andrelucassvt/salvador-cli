@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:salvador_cli/salvador_cli.dart';
+import 'package:salvador_desktop/presentation/desktop/content/git_action_review_dialog.dart';
 import 'package:salvador_desktop/presentation/desktop/theme/desktop_theme.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/git_assistant_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/git_assistant_state.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/git_cubit.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/git_state.dart';
+import 'package:salvador_desktop/presentation/desktop/widgets/git_assistant_drawer.dart';
 import 'package:salvador_desktop/presentation/desktop/widgets/git_branches_panel.dart';
 import 'package:salvador_desktop/presentation/desktop/widgets/git_commit_graph.dart';
 import 'package:salvador_desktop/presentation/desktop/widgets/git_commit_inspector.dart';
@@ -81,7 +85,24 @@ class _GitWorkspaceState extends State<GitWorkspace> {
         return Container(
           key: const Key('git-workspace'),
           color: shell,
-          child: content,
+          constraints: const BoxConstraints.expand(),
+          child: Stack(
+            children: [
+              Positioned.fill(child: content),
+              BlocBuilder<GitAssistantCubit, GitAssistantState>(
+                builder: (context, assistantState) {
+                  final open = (assistantState as GitAssistantIdle).drawerOpen;
+                  if (!open) return const SizedBox.shrink();
+                  return const Positioned(
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    child: GitAssistantDrawer(),
+                  );
+                },
+              ),
+            ],
+          ),
         );
       },
     );
@@ -115,7 +136,13 @@ class _LoadedWorkspace extends StatelessWidget {
         return Column(
           children: [
             if (refreshing) const LinearProgressIndicator(minHeight: 2),
-            _GitHeader(snapshot: state.snapshot, onRefresh: onRefresh),
+            _GitHeader(
+              snapshot: state.snapshot,
+              executing: state.executingAction != null,
+              onRefresh: onRefresh,
+            ),
+            if (state.actionError != null)
+              _ActionErrorBanner(message: state.actionError!),
             Expanded(
               child: compact
                   ? _CompactLayout(
@@ -224,10 +251,25 @@ class _CompactLayout extends StatelessWidget {
 }
 
 class _GitHeader extends StatelessWidget {
-  const _GitHeader({required this.snapshot, required this.onRefresh});
+  const _GitHeader({
+    required this.snapshot,
+    required this.executing,
+    required this.onRefresh,
+  });
 
   final GitSnapshot snapshot;
+  final bool executing;
   final Future<void> Function() onRefresh;
+
+  Future<void> _requestFetch(BuildContext context) async {
+    const proposal = GitActionProposal(type: GitActionType.fetch);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => GitActionReviewDialog(proposal: proposal),
+    );
+    if (confirmed != true || !context.mounted) return;
+    await context.read<GitCubit>().executeApproved(proposal);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -274,64 +316,98 @@ class _GitHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          Text(
-            'HEAD ${_short(repository.headOid)}',
-            style: const TextStyle(
-              color: muted,
-              fontSize: 10.5,
-              fontFamily: 'JetBrains Mono',
-            ),
-          ),
-          if (snapshot.upstream != null) ...[
-            const SizedBox(width: 10),
-            const Icon(Icons.call_split_rounded, size: 12, color: muted),
-            const SizedBox(width: 3),
-            Text(
-              snapshot.upstream!,
-              style: const TextStyle(
-                color: muted,
-                fontSize: 10.5,
-                fontFamily: 'JetBrains Mono',
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'HEAD ${_short(repository.headOid)}',
+                    style: const TextStyle(
+                      color: muted,
+                      fontSize: 10.5,
+                      fontFamily: 'JetBrains Mono',
+                    ),
+                  ),
+                  if (snapshot.upstream != null) ...[
+                    const SizedBox(width: 10),
+                    const Icon(
+                      Icons.call_split_rounded,
+                      size: 12,
+                      color: muted,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      snapshot.upstream!,
+                      style: const TextStyle(
+                        color: muted,
+                        fontSize: 10.5,
+                        fontFamily: 'JetBrains Mono',
+                      ),
+                    ),
+                  ],
+                  const SizedBox(width: 10),
+                  Text(
+                    'ahead',
+                    style: const TextStyle(
+                      color: Color(0xFF2E7D57),
+                      fontSize: 10.5,
+                      fontFamily: 'JetBrains Mono',
+                    ),
+                  ),
+                  Text(
+                    '${snapshot.ahead}',
+                    style: const TextStyle(
+                      color: Color(0xFF2E7D57),
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'JetBrains Mono',
+                    ),
+                  ),
+                  const SizedBox(width: 7),
+                  Text(
+                    'behind',
+                    style: const TextStyle(
+                      color: Color(0xFFB3492E),
+                      fontSize: 10.5,
+                      fontFamily: 'JetBrains Mono',
+                    ),
+                  ),
+                  Text(
+                    '${snapshot.behind}',
+                    style: const TextStyle(
+                      color: Color(0xFFB3492E),
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'JetBrains Mono',
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-          const SizedBox(width: 10),
-          Text(
-            'ahead',
-            style: const TextStyle(
-              color: Color(0xFF2E7D57),
-              fontSize: 10.5,
-              fontFamily: 'JetBrains Mono',
-            ),
-          ),
-          Text(
-            '${snapshot.ahead}',
-            style: const TextStyle(
-              color: Color(0xFF2E7D57),
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              fontFamily: 'JetBrains Mono',
-            ),
-          ),
-          const SizedBox(width: 7),
-          Text(
-            'behind',
-            style: const TextStyle(
-              color: Color(0xFFB3492E),
-              fontSize: 10.5,
-              fontFamily: 'JetBrains Mono',
-            ),
-          ),
-          Text(
-            '${snapshot.behind}',
-            style: const TextStyle(
-              color: Color(0xFFB3492E),
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              fontFamily: 'JetBrains Mono',
             ),
           ),
           const Spacer(),
+          IconButton(
+            key: const Key('git-fetch-button'),
+            tooltip: 'Fetch',
+            visualDensity: VisualDensity.compact,
+            onPressed: executing ? null : () => _requestFetch(context),
+            icon: executing
+                ? const SizedBox.square(
+                    dimension: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.cloud_download_outlined, size: 18),
+          ),
+          IconButton(
+            key: const Key('git-ask-assistant-button'),
+            tooltip: 'Pedir ao Salvador',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => context.read<GitAssistantCubit>().openDrawer(),
+            icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+          ),
           IconButton(
             key: const Key('git-refresh-button'),
             tooltip: 'Atualizar',
@@ -346,6 +422,39 @@ class _GitHeader extends StatelessWidget {
 
   static String _short(String? oid) =>
       oid == null ? 'n/d' : oid.substring(0, 7);
+}
+
+class _ActionErrorBanner extends StatelessWidget {
+  const _ActionErrorBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('git-action-error-banner'),
+      color: const Color(0xFFFFEFE9),
+      padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline_rounded, size: 15, color: coral),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Falha na ação: $message',
+              style: const TextStyle(color: Color(0xFF7A3B2E), fontSize: 11.5),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Descartar erro',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => context.read<GitCubit>().clearActionError(),
+            icon: const Icon(Icons.close_rounded, size: 15, color: coral),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _GitLoadingView extends StatelessWidget {

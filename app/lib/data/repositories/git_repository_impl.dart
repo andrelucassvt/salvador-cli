@@ -80,4 +80,35 @@ class GitRepositoryImpl implements GitRepository {
       );
     }
   }
+
+  @override
+  Future<Result<String>> executeAction({
+    required Directory root,
+    required GitActionProposal proposal,
+  }) async {
+    try {
+      final output = await _dataSource.executeAction(root, proposal);
+      return Result.ok(output);
+    } on GitException catch (error) {
+      return Result.error(
+        GitFailureException(error.message, cause: error.cause),
+      );
+    } on ProcessException catch (error, stackTrace) {
+      return Result.error(
+        GitFailureException(
+          'Falha ao executar git: ${error.message}',
+          cause: error,
+          stackTrace: stackTrace,
+        ),
+      );
+    } catch (error, stackTrace) {
+      return Result.error(
+        UnknownException(
+          'Falha inesperada',
+          cause: error,
+          stackTrace: stackTrace,
+        ),
+      );
+    }
+  }
 }
