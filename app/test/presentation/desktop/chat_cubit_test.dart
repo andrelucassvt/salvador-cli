@@ -211,6 +211,28 @@ void main() {
     );
 
     blocTest<ChatCubit, ChatState>(
+      'send_withImageAttachmentAndNoText_stillSends',
+      build: () {
+        final file = File('${tempDir.path}/foto.png')
+          ..writeAsBytesSync([0, 1, 2, 3]);
+        return ChatCubit(fakeRepository, attachments: const FileAttachmentService())
+          ..updateReadiness(true)
+          ..addAttachments([file.path]);
+      },
+      act: (cubit) {
+        fakeRepository.reply = const AgentTurnResult(answer: 'vejo uma imagem');
+        return cubit.send('');
+      },
+      verify: (cubit) {
+        expect(fakeRepository.lastImages, isNotEmpty);
+        final idle = cubit.state as ChatIdle;
+        expect(idle.messages.first.attachedFiles, ['foto.png']);
+        expect(idle.messages.last.content, 'vejo uma imagem');
+        expect(idle.pendingAttachments, isEmpty);
+      },
+    );
+
+    blocTest<ChatCubit, ChatState>(
       'send_withInvalidAttachment_addsWarningWithoutBlockingSend',
       build: () {
         return ChatCubit(fakeRepository, attachments: const FileAttachmentService())

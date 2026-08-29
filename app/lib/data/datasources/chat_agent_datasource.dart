@@ -42,12 +42,12 @@ class ChatAgentDataSource {
     );
   }
 
-  Future<AgentTurnResult> send(String message) {
+  Future<AgentTurnResult> send(String message, {List<String> images = const []}) {
     final session = _session;
     if (session == null) {
       throw const AgentException('sessao do agente nao configurada');
     }
-    return session.sendDetailed(message);
+    return session.sendDetailed(message, images: images);
   }
 
   void clearSession() => _session?.clear();

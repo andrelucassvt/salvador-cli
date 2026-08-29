@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -65,6 +66,39 @@ void main() {
 
       expect(result, isA<AttachmentRejected>());
       expect((result as AttachmentRejected).reason, contains('UTF-8'));
+    });
+
+    test('whenFileIsImage_returnsBase64WithMimeType', () {
+      final file = File('${tempDir.path}/foto.png')
+        ..writeAsBytesSync([0, 1, 2, 3]);
+      const service = FileAttachmentService();
+
+      final result = service.readContent(file.path);
+
+      expect(result, isA<AttachmentImage>());
+      expect((result as AttachmentImage).mimeType, 'image/png');
+      expect(result.base64, base64Encode([0, 1, 2, 3]));
+    });
+
+    test('whenImageExceedsMaxImageBytes_returnsRejected', () {
+      final file = File('${tempDir.path}/foto.jpg')
+        ..writeAsStringSync('0123456789');
+      const service = FileAttachmentService(maxImageBytes: 4);
+
+      final result = service.readContent(file.path);
+
+      expect(result, isA<AttachmentRejected>());
+      expect((result as AttachmentRejected).reason, contains('excede'));
+    });
+
+    test('whenImageExceedsMaxFileBytesButNotMaxImageBytes_returnsContent', () {
+      final file = File('${tempDir.path}/foto.gif')
+        ..writeAsBytesSync(List.filled(1024, 1));
+      const service = FileAttachmentService(maxFileBytes: 4);
+
+      final result = service.readContent(file.path);
+
+      expect(result, isA<AttachmentImage>());
     });
   });
 }

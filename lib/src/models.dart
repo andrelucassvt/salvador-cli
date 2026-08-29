@@ -55,6 +55,7 @@ class AgentMessage {
     this.content = '',
     this.toolCalls = const [],
     this.toolName,
+    this.images = const [],
     this.metrics,
   });
 
@@ -74,11 +75,17 @@ class AgentMessage {
               .toList(growable: false)
         : const <ToolCall>[];
 
+    final rawImages = json['images'];
+    final images = rawImages is List
+        ? rawImages.whereType<String>().toList(growable: false)
+        : const <String>[];
+
     return AgentMessage(
       role: role,
       content: json['content'] as String? ?? '',
       toolCalls: toolCalls,
       toolName: json['tool_name'] as String?,
+      images: images,
     );
   }
 
@@ -86,6 +93,7 @@ class AgentMessage {
   final String content;
   final List<ToolCall> toolCalls;
   final String? toolName;
+  final List<String> images;
   final InferenceMetrics? metrics;
 
   AgentMessage withMetrics(InferenceMetrics value) => AgentMessage(
@@ -93,6 +101,7 @@ class AgentMessage {
     content: content,
     toolCalls: toolCalls,
     toolName: toolName,
+    images: images,
     metrics: value,
   );
 
@@ -102,6 +111,7 @@ class AgentMessage {
     if (toolCalls.isNotEmpty)
       'tool_calls': toolCalls.map((call) => call.toJson()).toList(),
     if (toolName != null) 'tool_name': toolName,
+    if (images.isNotEmpty) 'images': images,
   };
 }
 

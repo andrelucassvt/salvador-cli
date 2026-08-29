@@ -16,6 +16,7 @@ class FakeChatRepository implements ChatRepository {
   int configureCallCount = 0;
   int clearCallCount = 0;
   String? lastMessage;
+  List<String>? lastImages;
   Directory? lastRoot;
 
   @override
@@ -34,8 +35,12 @@ class FakeChatRepository implements ChatRepository {
   }
 
   @override
-  Future<Result<AgentTurnResult>> send(String message) async {
+  Future<Result<AgentTurnResult>> send(
+    String message, {
+    List<String> images = const [],
+  }) async {
     lastMessage = message;
+    lastImages = images;
     if (failure != null) return Result.error(failure!);
     return Result.ok(reply);
   }

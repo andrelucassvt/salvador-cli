@@ -47,11 +47,18 @@ class AgentSession {
 
   Future<String> send(String input) async => (await sendDetailed(input)).answer;
 
-  Future<AgentTurnResult> sendDetailed(String input) async {
-    if (input.trim().isEmpty) return const AgentTurnResult(answer: '');
+  Future<AgentTurnResult> sendDetailed(
+    String input, {
+    List<String> images = const [],
+  }) async {
+    if (input.trim().isEmpty && images.isEmpty) {
+      return const AgentTurnResult(answer: '');
+    }
     final expansion =
         _mentions?.expand(input) ?? MentionExpansion(prompt: input);
-    _messages.add(AgentMessage(role: 'user', content: expansion.prompt));
+    _messages.add(
+      AgentMessage(role: 'user', content: expansion.prompt, images: images),
+    );
     InferenceMetrics? combinedMetrics;
 
     for (var round = 0; round <= maxToolRounds; round++) {

@@ -164,7 +164,9 @@ class _ShellScreenState extends State<_ShellScreen> {
 
   Future<void> _send() async {
     final text = _promptController.text;
-    if (text.trim().isEmpty) return;
+    final hasAttachments =
+        (_chatCubit.state as ChatIdle).pendingAttachments.isNotEmpty;
+    if (text.trim().isEmpty && !hasAttachments) return;
     if (text.trim() == '/exit' || text.trim() == '/quit') {
       await SystemNavigator.pop();
       return;
@@ -388,6 +390,13 @@ class _ShellScreenState extends State<_ShellScreen> {
         Expanded(child: _buildCenter()),
         BlocBuilder<ChatCubit, ChatState>(
           builder: (context, chatState) {
+            final message = _chatErrorMessage(chatState as ChatIdle);
+            if (message == null) return const SizedBox.shrink();
+            return ErrorBanner(message: message);
+          },
+        ),
+        BlocBuilder<ChatCubit, ChatState>(
+          builder: (context, chatState) {
             final idle = chatState as ChatIdle;
             return BlocBuilder<WorkspaceCubit, WorkspaceState>(
               builder: (context, workspaceState) {
@@ -484,5 +493,18 @@ class _ShellScreenState extends State<_ShellScreen> {
     if (error == null) return null;
     if (error is AppException) return error.message;
     return error.toString();
+  }
+
+  String? _chatErrorMessage(ChatIdle state) {
+    switch (state.errorKind) {
+      case null:
+        return null;
+      case ChatErrorKind.sessionNotReady:
+        return 'Aguarde a conexão com o Ollama e o modelo carregado antes de enviar.';
+      case ChatErrorKind.sendFailed:
+        final error = state.error;
+        if (error is AppException) return error.message;
+        return error?.toString() ?? 'Falha ao enviar a mensagem.';
+    }
   }
 }

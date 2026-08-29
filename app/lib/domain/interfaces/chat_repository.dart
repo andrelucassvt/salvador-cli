@@ -19,7 +19,10 @@ abstract class ChatRepository {
 
   Stream<ToolActivityEntity> get toolActivity;
 
-  Future<Result<AgentTurnResult>> send(String message);
+  Future<Result<AgentTurnResult>> send(
+    String message, {
+    List<String> images = const [],
+  });
 
   void clearSession();
 }

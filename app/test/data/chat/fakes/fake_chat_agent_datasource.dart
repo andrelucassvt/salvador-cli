@@ -14,6 +14,7 @@ class FakeChatAgentDataSource implements ChatAgentDataSource {
   int configureCallCount = 0;
   int clearCallCount = 0;
   String? lastMessage;
+  List<String>? lastImages;
 
   @override
   Stream<ToolActivityEntity> get toolActivity => activityController.stream;
@@ -30,8 +31,12 @@ class FakeChatAgentDataSource implements ChatAgentDataSource {
   }
 
   @override
-  Future<AgentTurnResult> send(String message) async {
+  Future<AgentTurnResult> send(
+    String message, {
+    List<String> images = const [],
+  }) async {
     lastMessage = message;
+    lastImages = images;
     if (exceptionToThrow != null) throw exceptionToThrow!;
     return reply;
   }

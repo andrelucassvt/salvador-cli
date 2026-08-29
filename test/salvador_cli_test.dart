@@ -82,6 +82,18 @@ void main() {
     expect(client.requests.single.first.content, isNot(contains('Raiz:')));
   });
 
+  test('envia imagens mesmo sem texto de acompanhamento', () async {
+    final client = FakeChatClient([
+      AgentMessage(role: 'assistant', content: 'vejo uma imagem'),
+    ]);
+    final session = AgentSession(client: client);
+
+    final result = await session.sendDetailed('', images: ['base64==']);
+
+    expect(result.answer, 'vejo uma imagem');
+    expect(client.requests.single.last.images, ['base64==']);
+  });
+
   test('aceita argumentos de tool call serializados como JSON', () {
     final call = ToolCall.fromJson({
       'function': {'name': 'read_file', 'arguments': '{"path":"README.md"}'},

@@ -83,7 +83,10 @@ class ChatCubit extends Cubit<ChatState> {
   Future<void> send(String input) async {
     final normalized = input.trim();
     final current = state as ChatIdle;
-    if (normalized.isEmpty || current.sending) return;
+    if ((normalized.isEmpty && current.pendingAttachments.isEmpty) ||
+        current.sending) {
+      return;
+    }
     if (!_ready) {
       emit(current.copyWith(errorKind: ChatErrorKind.sessionNotReady));
       return;
@@ -92,6 +95,7 @@ class ChatCubit extends Cubit<ChatState> {
     final attachedNames = <String>[];
     final attachmentWarnings = <String>[];
     final attachmentBlocks = StringBuffer();
+    final images = <String>[];
     for (final attachment in current.pendingAttachments) {
       switch (_attachments.readContent(attachment.path)) {
         case AttachmentContent(:final content):
@@ -101,6 +105,9 @@ class ChatCubit extends Cubit<ChatState> {
             ..writeln('--- arquivo anexado: ${attachment.name} ---')
             ..writeln(content)
             ..writeln('--- fim do arquivo: ${attachment.name} ---');
+        case AttachmentImage(:final base64):
+          attachedNames.add(attachment.name);
+          images.add(base64);
         case AttachmentRejected(:final reason):
           attachmentWarnings.add('${attachment.name} ignorado: $reason.');
       }
@@ -127,7 +134,7 @@ class ChatCubit extends Cubit<ChatState> {
     );
     emit(withUserMessage);
 
-    final result = await _repository.send(outgoing);
+    final result = await _repository.send(outgoing, images: images);
     switch (result) {
       case Error(:final error):
         emit(

@@ -33,9 +33,12 @@ class ChatRepositoryImpl implements ChatRepository {
   }
 
   @override
-  Future<Result<AgentTurnResult>> send(String message) async {
+  Future<Result<AgentTurnResult>> send(
+    String message, {
+    List<String> images = const [],
+  }) async {
     try {
-      final reply = await _dataSource.send(message);
+      final reply = await _dataSource.send(message, images: images);
       return Result.ok(reply);
     } catch (error, stackTrace) {
       return Result.error(_toAppException(error, stackTrace));
