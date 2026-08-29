@@ -617,10 +617,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('git-navigation-button')));
     await tester.pumpAndSettle();
-    expect(
-      find.text('Esta pasta não é um repositório Git.'),
-      findsOneWidget,
-    );
+    expect(find.text('Esta pasta não é um repositório Git.'), findsOneWidget);
 
     harness.gitRepository.nextResult = const Result.ok(
       GitSnapshot(
@@ -682,19 +679,17 @@ void main() {
               authorEmail: 't@t.co',
               authorDate: DateTime(2026, 8, 29),
             ),
-          ],          worktree: const [
-            GitWorktreeEntry(
-              path: 'a.txt',
-              status: GitWorktreeStatus.unstaged,
-            ),
+          ],
+          worktree: const [
+            GitWorktreeEntry(path: 'a.txt', status: GitWorktreeStatus.unstaged),
           ],
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('main'), findsOneWidget);
-    // ahead=3 e unico; behind=1 e repetido nas contagens dos chips.
+    expect(find.text('main'), findsWidgets);
+    // ahead=3 e unico; behind=1 e repetido nas contagens dos grupos.
     expect(find.text('3'), findsOneWidget);
     expect(find.textContaining('sujo'), findsOneWidget);
     expect(find.byKey(const Key('git-refresh-button')), findsOneWidget);

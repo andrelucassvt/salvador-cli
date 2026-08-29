@@ -44,4 +44,40 @@ class GitRepositoryImpl implements GitRepository {
       );
     }
   }
+
+  @override
+  Future<Result<GitCommitPage>> loadMoreCommits({
+    required Directory root,
+    required int skip,
+    required int count,
+  }) async {
+    try {
+      final page = await _dataSource.loadMoreCommits(
+        root,
+        skip: skip,
+        count: count,
+      );
+      return Result.ok(page);
+    } on GitException catch (error) {
+      return Result.error(
+        GitFailureException(error.message, cause: error.cause),
+      );
+    } on ProcessException catch (error, stackTrace) {
+      return Result.error(
+        GitFailureException(
+          'Falha ao executar git: ${error.message}',
+          cause: error,
+          stackTrace: stackTrace,
+        ),
+      );
+    } catch (error, stackTrace) {
+      return Result.error(
+        UnknownException(
+          'Falha inesperada',
+          cause: error,
+          stackTrace: stackTrace,
+        ),
+      );
+    }
+  }
 }

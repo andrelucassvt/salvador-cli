@@ -25,18 +25,106 @@ class GitEmpty extends GitState {
 class GitLoading extends GitState {
   const GitLoading({this.previous});
 
-  final GitSnapshot? previous;
+  final GitLoaded? previous;
 
   @override
   String toString() =>
       'GitLoading(previous: ${previous == null ? 'nenhum' : 'snapshot'})';
 }
 
-/// Snapshot valido do repositorio na raiz vinculada.
+/// Snapshot valido do repositorio na raiz vinculada, com selecoes, filtro e
+/// historico paginado derivados sem mutar os dados brutos.
+@immutable
 class GitLoaded extends GitState {
-  const GitLoaded({required this.snapshot});
+  const GitLoaded({
+    required this.snapshot,
+    this.commits,
+    this.hasMoreCommits = false,
+    this.loadingMore = false,
+    this.searchQuery = '',
+    this.selectedRef,
+    this.selectedCommitHash,
+    this.selectedFilePath,
+  });
 
   final GitSnapshot snapshot;
+
+  /// Historico derivado: `snapshot.commits` + paginas carregadas por
+  /// `loadMore`. Quando null, usa `snapshot.commits`.
+  final List<GitCommit>? commits;
+  final bool hasMoreCommits;
+  final bool loadingMore;
+
+  /// Filtro case-insensitive aplicado a branches, tags e worktree.
+  final String searchQuery;
+  final String? selectedRef;
+  final String? selectedCommitHash;
+  final String? selectedFilePath;
+
+  List<GitCommit> get visibleCommits => commits ?? snapshot.commits;
+
+  List<GitRef> get visibleLocalBranches => _filterRefs(snapshot.localBranches);
+
+  List<GitRef> get visibleRemoteBranches =>
+      _filterRefs(snapshot.remoteBranches);
+
+  List<GitRef> get visibleTags => _filterRefs(snapshot.tags);
+
+  List<GitWorktreeEntry> get visibleWorktree {
+    final query = searchQuery.toLowerCase();
+    if (query.isEmpty) return snapshot.worktree;
+    return snapshot.worktree
+        .where((entry) => entry.path.toLowerCase().contains(query))
+        .toList(growable: false);
+  }
+
+  GitCommit? get selectedCommit {
+    final hash = selectedCommitHash;
+    if (hash == null) return null;
+    for (final commit in visibleCommits) {
+      if (commit.hash == hash) return commit;
+    }
+    return null;
+  }
+
+  List<GitRef> _filterRefs(List<GitRef> refs) {
+    final query = searchQuery.toLowerCase();
+    if (query.isEmpty) return refs;
+    return refs
+        .where((ref) => ref.shortName.toLowerCase().contains(query))
+        .toList(growable: false);
+  }
+
+  GitLoaded copyWith({
+    GitSnapshot? snapshot,
+    List<GitCommit>? commits,
+    bool clearCommits = false,
+    bool? hasMoreCommits,
+    bool? loadingMore,
+    String? searchQuery,
+    bool clearSearch = false,
+    String? selectedRef,
+    bool clearSelectedRef = false,
+    String? selectedCommitHash,
+    bool clearSelectedCommit = false,
+    String? selectedFilePath,
+    bool clearSelectedFile = false,
+  }) {
+    return GitLoaded(
+      snapshot: snapshot ?? this.snapshot,
+      commits: clearCommits ? null : (commits ?? this.commits),
+      hasMoreCommits: hasMoreCommits ?? this.hasMoreCommits,
+      loadingMore: loadingMore ?? this.loadingMore,
+      searchQuery: clearSearch ? '' : (searchQuery ?? this.searchQuery),
+      selectedRef: clearSelectedRef ? null : (selectedRef ?? this.selectedRef),
+      selectedCommitHash: clearSelectedCommit
+          ? null
+          : (selectedCommitHash ?? this.selectedCommitHash),
+      selectedFilePath: clearSelectedFile
+          ? null
+          : (selectedFilePath ?? this.selectedFilePath),
+    );
+  }
 
   @override
   bool operator ==(Object other) =>
@@ -52,7 +140,14 @@ class GitLoaded extends GitState {
       other.snapshot.stashCount == snapshot.stashCount &&
       other.snapshot.commits.length == snapshot.commits.length &&
       other.snapshot.worktree.length == snapshot.worktree.length &&
-      other.snapshot.commitsTruncated == snapshot.commitsTruncated;
+      other.snapshot.commitsTruncated == snapshot.commitsTruncated &&
+      other.visibleCommits.length == visibleCommits.length &&
+      other.hasMoreCommits == hasMoreCommits &&
+      other.loadingMore == loadingMore &&
+      other.searchQuery == searchQuery &&
+      other.selectedRef == selectedRef &&
+      other.selectedCommitHash == selectedCommitHash &&
+      other.selectedFilePath == selectedFilePath;
 
   @override
   int get hashCode => Object.hash(
@@ -67,14 +162,23 @@ class GitLoaded extends GitState {
     snapshot.commits.length,
     snapshot.worktree.length,
     snapshot.commitsTruncated,
+    visibleCommits.length,
+    hasMoreCommits,
+    loadingMore,
+    searchQuery,
+    selectedRef,
+    selectedCommitHash,
+    selectedFilePath,
   );
 
   @override
-  String toString() => 'GitLoaded(branch: ${snapshot.repository.branch}, '
+  String toString() =>
+      'GitLoaded(branch: ${snapshot.repository.branch}, '
       'head: ${snapshot.repository.headOid?.substring(0, 7) ?? 'n/d'}, '
       'ahead: ${snapshot.ahead}, behind: ${snapshot.behind}, '
-      'clean: ${snapshot.clean}, commits: ${snapshot.commits.length}, '
-      'worktree: ${snapshot.worktree.length})';
+      'clean: ${snapshot.clean}, commits: ${visibleCommits.length}, '
+      'worktree: ${snapshot.worktree.length}, '
+      'searchQuery: $searchQuery, selectedCommit: $selectedCommitHash)';
 }
 
 /// A pasta vinculada existe mas nao e um repositorio Git.

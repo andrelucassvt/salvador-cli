@@ -56,6 +56,67 @@ const _logValid =
     '6a4f2ff\x00feat: unicode çãü\x00Test\x00t@t.co\x002026-08-29T09:44:55-03:00\x00'
     '$_oidTag\x00\x00\x00';
 
+/// Saida de `log --name-status --format=%x1e -z`: cada commit separado por
+/// `\x1e`, com `\x00\n` antes do primeiro par STATUS/path.
+const _filesValid =
+    '\x1e\x00\n'
+    'M\x00a.txt\x00'
+    'A\x00novo nome.txt\x00'
+    '\x1e\x00\n'
+    'M\x00README.md\x00'
+    '\x1e\x00\n'
+    'R100\x00renomeado.txt\x00'
+    '\x1e\x00';
+
+/// Historico linear de N commits respeitando `--skip`/`--max-count` dos
+/// argumentos, simulando a paginacao real do git.
+String _linearLog(List<String> arguments, {required int total}) {
+  final skip = _argumentInt(arguments, '--skip=');
+  final count = _argumentInt(arguments, '--max-count=');
+  final remaining = (total - skip).clamp(0, count);
+  final buffer = StringBuffer();
+  for (var index = 0; index < remaining; index++) {
+    final commit = index + skip;
+    final hash =
+        '${'${commit + 1}'.padLeft(3, '0')}'
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    buffer
+      ..write('$hash\x00')
+      ..write('${hash.substring(0, 7)}\x00')
+      ..write(
+        'commit ${commit + 1}\x00Test\x00t@t.co\x00'
+        '2026-08-29T09:44:55-03:00\x00',
+      )
+      ..write(
+        '${commit > 0 ? '${'$commit'.padLeft(3, '0')}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' : ''}\x00',
+      )
+      ..write('\x00\x00');
+  }
+  return buffer.toString();
+}
+
+String _linearFiles(List<String> arguments, {required int total}) {
+  final skip = _argumentInt(arguments, '--skip=');
+  final count = _argumentInt(arguments, '--max-count=');
+  final remaining = (total - skip).clamp(0, count);
+  final buffer = StringBuffer();
+  for (var index = 0; index < remaining; index++) {
+    buffer
+      ..write('\x1e\x00\n')
+      ..write('M\x00arquivo${index + skip}.txt\x00');
+  }
+  buffer.write('\x1e\x00');
+  return buffer.toString();
+}
+
+int _argumentInt(List<String> arguments, String prefix) {
+  final argument = arguments.firstWhere(
+    (candidate) => candidate.startsWith(prefix),
+    orElse: () => '$prefix 0',
+  );
+  return int.tryParse(argument.substring(prefix.length)) ?? 0;
+}
+
 void main() {
   final root = Directory('/repo/raiz');
   late _ScriptedGitRunner runner;
@@ -66,7 +127,12 @@ void main() {
     client = GitClient(processRunner: runner.call);
   });
 
-  String scriptKey(List<String> arguments) => arguments[3];
+  String scriptKey(List<String> arguments) {
+    if (arguments[3] == 'log' && arguments[4] == '--name-status') {
+      return 'log-files';
+    }
+    return arguments[3];
+  }
 
   group('GitClient.discover', () {
     test('repositorio valido com branch', () async {
@@ -168,6 +234,8 @@ void main() {
             );
           case 'log':
             return _processResult(_logValid);
+          case 'log-files':
+            return _processResult(_filesValid);
         }
         return _emptyResult();
       };
@@ -218,6 +286,14 @@ void main() {
       final rename = snapshot.worktree[2];
       expect(rename.origPath, 'novo nome.txt');
       expect(snapshot.commitsTruncated, isFalse);
+
+      expect(
+        snapshot.commits[0].files.map((file) => '${file.status} ${file.path}'),
+        ['M a.txt', 'A novo nome.txt'],
+      );
+      expect(snapshot.commits[1].files.map((file) => file.path), ['README.md']);
+      expect(snapshot.commits[2].files.single.status, 'R');
+      expect(snapshot.commits[2].files.single.path, 'renomeado.txt');
     });
 
     test('repositorio limpo sem refs nem commits nao quebra', () async {
@@ -450,6 +526,68 @@ void main() {
         expect(arguments[1], '-C');
         expect(arguments[2], root.path);
       }
+    });
+
+    test(
+      'loadMoreCommits pagina sem duplicar hashes e marca hasMore',
+      () async {
+        runner.script = (arguments) {
+          switch (scriptKey(arguments)) {
+            case 'rev-parse':
+              return _processResult('/repo/raiz');
+            case 'symbolic-ref':
+              return _processResult('main');
+            case 'status':
+              return _processResult(_statusValid);
+            case 'for-each-ref':
+              return _processResult(_refsValid);
+            case 'stash':
+              return _processResult('');
+            case 'log':
+              return _processResult(_linearLog(arguments, total: 5));
+            case 'log-files':
+              return _processResult(_linearFiles(arguments, total: 5));
+          }
+          return _emptyResult();
+        };
+
+        final page = await client.loadMoreCommits(root, skip: 0, count: 2);
+
+        expect(page.commits, hasLength(2));
+        expect(page.hasMore, isTrue);
+        expect(
+          page.commits.map((commit) => commit.hash).toSet(),
+          hasLength(2),
+          reason: 'hashes nao podem duplicar dentro da pagina',
+        );
+        expect(page.commits.first.files.single.path, 'arquivo0.txt');
+
+        final skipArguments = runner.calls.where(
+          (arguments) => arguments.contains('--skip=0'),
+        );
+        expect(skipArguments, isNotEmpty);
+      },
+    );
+
+    test('loadMoreCommits ultima pagina retorna hasMore false', () async {
+      runner.script = (arguments) {
+        switch (scriptKey(arguments)) {
+          case 'log':
+            return _processResult(_linearLog(arguments, total: 5));
+          case 'log-files':
+            return _processResult(_linearFiles(arguments, total: 5));
+        }
+        return _emptyResult();
+      };
+
+      final page = await client.loadMoreCommits(root, skip: 3, count: 3);
+
+      expect(page.commits, hasLength(2));
+      expect(page.hasMore, isFalse);
+      expect(page.commits.map((commit) => commit.hash), [
+        '004aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        '005aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      ]);
     });
   });
 }

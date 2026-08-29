@@ -12,4 +12,10 @@ class GitDataSource {
     Directory root, {
     int maxCommits = GitClient.maxCommitsDefault,
   }) => _client.loadSnapshot(root, maxCommits: maxCommits);
+
+  Future<GitCommitPage> loadMoreCommits(
+    Directory root, {
+    required int skip,
+    required int count,
+  }) => _client.loadMoreCommits(root, skip: skip, count: count);
 }

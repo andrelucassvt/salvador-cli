@@ -9,4 +9,10 @@ abstract interface class GitRepository {
     required Directory root,
     int maxCommits = GitClient.maxCommitsDefault,
   });
+
+  Future<Result<GitCommitPage>> loadMoreCommits({
+    required Directory root,
+    required int skip,
+    required int count,
+  });
 }

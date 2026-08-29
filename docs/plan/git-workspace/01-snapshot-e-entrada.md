@@ -85,7 +85,7 @@ O pacote raiz já injeta runners para processos do Ollama, mas não possui clien
 - [x] Preservar `WorkspaceTopBar` e o painel direito de arquivos nos dois modos; o composer aparece apenas no modo Chat nesta parte.
 - [x] Executar `dart format` nos Dart alterados, `dart analyze`, `dart test`, `cd app && flutter analyze` e `cd app && flutter test`, sem iniciar o app.
 - [x] Verificação: todos os comandos passam e `salvador_desktop_app_test.dart` comprova alternância Chat/Git com o estado do chat preservado.
-- [ ] Checkpoint: commit das mudanças da parte + resumo curto do snapshot e da navegação prontos, seguindo direto para a parte 2.
+- [x] Checkpoint: commit das mudanças da parte + resumo curto do snapshot e da navegação prontos, seguindo direto para a parte 2. Commit: `3a01f23`.
 
 ## Critérios de Sucesso
 

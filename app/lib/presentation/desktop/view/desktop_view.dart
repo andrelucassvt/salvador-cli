@@ -369,13 +369,15 @@ class _ShellScreenState extends State<_ShellScreen> {
               control: !isMac,
               meta: isMac,
               shift: true,
-            ): () => _selectSection(WorkspaceSection.git),
+            ): () =>
+                _selectSection(WorkspaceSection.git),
             SingleActivator(
               LogicalKeyboardKey.keyC,
               control: !isMac,
               meta: isMac,
               shift: true,
-            ): () => _selectSection(WorkspaceSection.chat),
+            ): () =>
+                _selectSection(WorkspaceSection.chat),
           },
           child: Scaffold(
             body: Column(

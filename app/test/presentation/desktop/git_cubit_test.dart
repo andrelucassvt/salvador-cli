@@ -64,8 +64,7 @@ void main() {
       },
       act: (cubit) => cubit.setRoot(root),
       expect: () => [
-        isA<GitLoading>()
-            .having((s) => s.previous, 'previous', isNull),
+        isA<GitLoading>().having((s) => s.previous, 'previous', isNull),
         isA<GitLoaded>().having(
           (s) => s.snapshot.repository.branch,
           'branch',
@@ -81,10 +80,7 @@ void main() {
         return GitCubit(fakeRepository);
       },
       act: (cubit) => cubit.setRoot(root),
-      expect: () => [
-        isA<GitLoading>(),
-        isA<GitNotRepository>(),
-      ],
+      expect: () => [isA<GitLoading>(), isA<GitNotRepository>()],
     );
 
     blocTest<GitCubit, GitState>(
@@ -115,8 +111,11 @@ void main() {
       act: (cubit) => cubit.setRoot(root),
       expect: () => [
         isA<GitLoading>(),
-        isA<GitFailure>()
-            .having((s) => s.message, 'message', 'repositorio corrompido'),
+        isA<GitFailure>().having(
+          (s) => s.message,
+          'message',
+          'repositorio corrompido',
+        ),
       ],
     );
   });
@@ -136,13 +135,13 @@ void main() {
       },
       expect: () => [
         isA<GitLoading>().having(
-          (s) => s.previous?.ahead,
+          (s) => s.previous?.snapshot.ahead,
           'previous.ahead',
           1,
         ),
         isA<GitLoaded>().having((s) => s.snapshot.ahead, 'ahead', 1),
         isA<GitLoading>().having(
-          (s) => s.previous?.ahead,
+          (s) => s.previous?.snapshot.ahead,
           'previous.ahead',
           1,
         ),
@@ -161,30 +160,235 @@ void main() {
   });
 
   group('GitCubit concorrencia', () {
-    test('resultado atrasado da raiz antiga nao sobrescreve a raiz atual',
-        () async {
+    test(
+      'resultado atrasado da raiz antiga nao sobrescreve a raiz atual',
+      () async {
+        final cubit = GitCubit(fakeRepository);
+        final snapshotA = validSnapshot(branch: 'main');
+        final snapshotB = validSnapshot(branch: 'feature');
+
+        unawaited(cubit.setRoot(root));
+        await Future<void>.delayed(Duration.zero);
+        expect(cubit.state, isA<GitLoading>());
+
+        unawaited(cubit.setRoot(otherRoot));
+        await Future<void>.delayed(Duration.zero);
+
+        // Resposta atrasada da raiz antiga chega primeiro e deve ser descartada.
+        fakeRepository.completeFirst(Result.ok(snapshotA));
+        await Future<void>.delayed(Duration.zero);
+        expect(cubit.state, isA<GitLoading>());
+
+        fakeRepository.completeFirst(Result.ok(snapshotB));
+        await Future<void>.delayed(Duration.zero);
+        final loaded = cubit.state;
+        expect(loaded, isA<GitLoaded>());
+        expect((loaded as GitLoaded).snapshot.repository.branch, 'feature');
+
+        await cubit.close();
+      },
+    );
+  });
+
+  group('GitCubit selecao e filtro', () {
+    GitLoaded loadedWith(GitSnapshot snapshot) => GitLoaded(snapshot: snapshot);
+
+    test('selectCommit marca o commit selecionado', () async {
+      final snapshot = validSnapshot();
+      fakeRepository.nextResult = Result.ok(snapshot);
       final cubit = GitCubit(fakeRepository);
-      final snapshotA = validSnapshot(branch: 'main');
-      final snapshotB = validSnapshot(branch: 'feature');
+      await cubit.setRoot(root);
 
-      unawaited(cubit.setRoot(root));
-      await Future<void>.delayed(Duration.zero);
-      expect(cubit.state, isA<GitLoading>());
+      cubit.selectCommit('6b8dc2efa9f5ff3a00f6262229969f841cefa6fc');
 
-      unawaited(cubit.setRoot(otherRoot));
-      await Future<void>.delayed(Duration.zero);
+      final state = cubit.state as GitLoaded;
+      expect(
+        state.selectedCommitHash,
+        '6b8dc2efa9f5ff3a00f6262229969f841cefa6fc',
+      );
+      await cubit.close();
+    });
 
-      // Resposta atrasada da raiz antiga chega primeiro e deve ser descartada.
-      fakeRepository.completeFirst(Result.ok(snapshotA));
-      await Future<void>.delayed(Duration.zero);
-      expect(cubit.state, isA<GitLoading>());
+    test('selectRef e selectFile marcam as selecoes', () async {
+      final snapshot = validSnapshot();
+      fakeRepository.nextResult = Result.ok(snapshot);
+      final cubit = GitCubit(fakeRepository);
+      await cubit.setRoot(root);
 
-      fakeRepository.completeFirst(Result.ok(snapshotB));
-      await Future<void>.delayed(Duration.zero);
-      final loaded = cubit.state;
-      expect(loaded, isA<GitLoaded>());
-      expect((loaded as GitLoaded).snapshot.repository.branch, 'feature');
+      cubit.selectRef('refs/heads/main');
+      cubit.selectFile('a.txt');
 
+      final state = cubit.state as GitLoaded;
+      expect(state.selectedRef, 'refs/heads/main');
+      expect(state.selectedFilePath, 'a.txt');
+      await cubit.close();
+    });
+
+    blocTest<GitCubit, GitState>(
+      'search filtra branches e worktree case-insensitive',
+      build: () {
+        final snapshot = GitSnapshot(
+          repository: const GitRepositoryState(
+            kind: GitRepositoryKind.valid,
+            topLevel: '/repo/raiz',
+            branch: 'main',
+            headOid: '6b8dc2efa9f5ff3a00f6262229969f841cefa6fc',
+          ),
+          localBranches: const [
+            GitRef(name: 'refs/heads/main', hash: 'a'),
+            GitRef(name: 'refs/heads/Feature-X', hash: 'b'),
+          ],
+          remoteBranches: const [
+            GitRef(name: 'refs/remotes/origin/main', hash: 'a'),
+          ],
+          tags: const [GitRef(name: 'refs/tags/v1.0.0', hash: 'c')],
+          worktree: const [
+            GitWorktreeEntry(
+              path: 'src/main.dart',
+              status: GitWorktreeStatus.unstaged,
+            ),
+            GitWorktreeEntry(
+              path: 'README.md',
+              status: GitWorktreeStatus.untracked,
+            ),
+          ],
+        );
+        fakeRepository.nextResult = Result.ok(snapshot);
+        return GitCubit(fakeRepository);
+      },
+      seed: () => loadedWith(
+        GitSnapshot(
+          repository: const GitRepositoryState(
+            kind: GitRepositoryKind.valid,
+            topLevel: '/repo/raiz',
+            branch: 'main',
+          ),
+        ),
+      ),
+      act: (cubit) async {
+        await cubit.setRoot(root);
+        cubit.search('FEATURE');
+      },
+      expect: () => [
+        isA<GitLoading>(),
+        isA<GitLoaded>(),
+        isA<GitLoaded>()
+            .having((s) => s.searchQuery, 'searchQuery', 'FEATURE')
+            .having(
+              (s) => s.visibleLocalBranches.map((r) => r.shortName),
+              'visibleLocalBranches',
+              ['Feature-X'],
+            )
+            .having(
+              (s) => s.visibleRemoteBranches,
+              'visibleRemoteBranches',
+              isEmpty,
+            )
+            .having((s) => s.visibleTags, 'visibleTags', isEmpty)
+            .having((s) => s.visibleWorktree, 'visibleWorktree', isEmpty),
+      ],
+    );
+
+    test(
+      'limpa selecoes que nao existem mais no snapshot atualizado',
+      () async {
+        final firstSnapshot = validSnapshot();
+        fakeRepository.nextResult = Result.ok(firstSnapshot);
+        final cubit = GitCubit(fakeRepository);
+        await cubit.setRoot(root);
+        cubit.selectCommit('6b8dc2efa9f5ff3a00f6262229969f841cefa6fc');
+        cubit.selectFile('a.txt');
+
+        final withoutCommit = GitSnapshot(
+          repository: const GitRepositoryState(
+            kind: GitRepositoryKind.valid,
+            topLevel: '/repo/raiz',
+            branch: 'main',
+            headOid: 'outrohash0000000000000000000000000000000000',
+          ),
+          worktree: const [
+            GitWorktreeEntry(
+              path: 'outro.txt',
+              status: GitWorktreeStatus.untracked,
+            ),
+          ],
+        );
+        fakeRepository.nextResult = Result.ok(withoutCommit);
+        await cubit.refresh();
+
+        final state = cubit.state as GitLoaded;
+        expect(state.selectedCommitHash, isNull);
+        expect(state.selectedFilePath, isNull);
+        expect(state.selectedRef, isNull);
+        await cubit.close();
+      },
+    );
+  });
+
+  group('GitCubit paginacao', () {
+    test('loadMore concatena sem duplicar e preserva a selecao', () async {
+      final snapshot = GitSnapshot(
+        repository: const GitRepositoryState(
+          kind: GitRepositoryKind.valid,
+          topLevel: '/repo/raiz',
+          branch: 'main',
+          headOid: 'a000000000000000000000000000000000000000',
+        ),
+        commits: [
+          GitCommit(
+            hash: 'a000000000000000000000000000000000000000',
+            shortHash: 'a000000',
+            subject: 'primeiro',
+            authorName: 't',
+            authorEmail: 't@t.co',
+            authorDate: DateTime(2026, 8, 29),
+          ),
+        ],
+      );
+      fakeRepository.nextResult = Result.ok(snapshot);
+      final cubit = GitCubit(fakeRepository);
+      await cubit.setRoot(root);
+      cubit.selectCommit('a000000000000000000000000000000000000000');
+
+      fakeRepository.nextPage = GitCommitPage(
+        commits: [
+          GitCommit(
+            hash: 'b1111111111111111111111111111111111111111',
+            shortHash: 'b111111',
+            subject: 'segundo',
+            authorName: 't',
+            authorEmail: 't@t.co',
+            authorDate: DateTime(2026, 8, 29),
+          ),
+          GitCommit(
+            hash: 'c2222222222222222222222222222222222222222',
+            shortHash: 'c222222',
+            subject: 'terceiro',
+            authorName: 't',
+            authorEmail: 't@t.co',
+            authorDate: DateTime(2026, 8, 29),
+          ),
+        ],
+        hasMore: true,
+      );
+      await cubit.loadMore();
+
+      final state = cubit.state as GitLoaded;
+      expect(state.visibleCommits.map((c) => c.hash), [
+        'a000000000000000000000000000000000000000',
+        'b1111111111111111111111111111111111111111',
+        'c2222222222222222222222222222222222222222',
+      ]);
+      expect(
+        state.visibleCommits.map((c) => c.hash).toSet().length,
+        state.visibleCommits.length,
+        reason: 'hashes nao podem duplicar apos concatenar paginas',
+      );
+      expect(
+        state.selectedCommitHash,
+        'a000000000000000000000000000000000000000',
+      );
+      expect(state.hasMoreCommits, isTrue);
       await cubit.close();
     });
   });

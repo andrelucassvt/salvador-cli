@@ -27,10 +27,7 @@ void main() {
     ahead: 3,
     behind: 1,
     worktree: const [
-      GitWorktreeEntry(
-        path: 'a.txt',
-        status: GitWorktreeStatus.unstaged,
-      ),
+      GitWorktreeEntry(path: 'a.txt', status: GitWorktreeStatus.unstaged),
     ],
   );
 
@@ -72,11 +69,10 @@ void main() {
     test(
       'loadSnapshot_whenProcessException_returnsGitFailureException',
       () async {
-        fakeDataSource.errorToThrow = const ProcessException(
-          'git',
-          ['-C', '/repo/raiz'],
-          'Exec format error',
-        );
+        fakeDataSource.errorToThrow = const ProcessException('git', [
+          '-C',
+          '/repo/raiz',
+        ], 'Exec format error');
 
         final result = await repository.loadSnapshot(root: root);
 
@@ -91,25 +87,22 @@ void main() {
       },
     );
 
-    test(
-      'loadSnapshot_whenUnknownError_preservesCauseAndStackTrace',
-      () async {
-        final failure = StateError('inesperado');
-        fakeDataSource.errorToThrow = failure;
+    test('loadSnapshot_whenUnknownError_preservesCauseAndStackTrace', () async {
+      final failure = StateError('inesperado');
+      fakeDataSource.errorToThrow = failure;
 
-        final result = await repository.loadSnapshot(root: root);
+      final result = await repository.loadSnapshot(root: root);
 
-        result.when(
-          ok: (_) => fail('esperava erro'),
-          error: (error) {
-            expect(error, isA<UnknownException>());
-            expect(error.message, 'Falha inesperada');
-            expect(error.cause, same(failure));
-            expect(error.stackTrace, isNotNull);
-          },
-        );
-      },
-    );
+      result.when(
+        ok: (_) => fail('esperava erro'),
+        error: (error) {
+          expect(error, isA<UnknownException>());
+          expect(error.message, 'Falha inesperada');
+          expect(error.cause, same(failure));
+          expect(error.stackTrace, isNotNull);
+        },
+      );
+    });
 
     test('loadSnapshot_forwardaMaxCommitsAoDatasource', () async {
       fakeDataSource.snapshotToReturn = validSnapshot();

@@ -15,3 +15,12 @@ const topBarHeight = 62.0;
 const panelWidth = 286.0;
 const filesPanelWidth = 290.0;
 const railWidth = 50.0;
+
+// Tokens do workspace Git (compartilhados por dois ou mais widgets).
+const gitLaneColor = Color(0xFFB8C4C9);
+const gitMergeColor = Color(0xFFF2A65A);
+const gitNodeColor = Color(0xFF147D92);
+const gitHeadColor = Color(0xFFED6A5A);
+const gitSelectedColor = Color(0xFFEAF4F6);
+const gitRowHeight = 36.0;
+const gitLaneWidth = 22.0;

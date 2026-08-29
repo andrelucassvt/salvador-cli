@@ -72,6 +72,18 @@ class GitRef {
   String toString() => 'GitRef($name @ ${hash.substring(0, 7)})';
 }
 
+/// Um arquivo alterado em um commit, conforme `log --name-status`.
+class GitCommitFile {
+  const GitCommitFile({required this.status, required this.path});
+
+  /// Letra do status (`A`, `M`, `D`, `R`, `C`, ...) sem o score de rename.
+  final String status;
+  final String path;
+
+  @override
+  String toString() => 'GitCommitFile($status $path)';
+}
+
 /// Um commit do historico limitado do snapshot.
 class GitCommit {
   const GitCommit({
@@ -84,6 +96,8 @@ class GitCommit {
     this.parentHashes = const [],
     this.body = '',
     this.bodyTruncated = false,
+    this.files = const [],
+    this.filesTruncated = false,
   });
 
   final String hash;
@@ -95,11 +109,38 @@ class GitCommit {
   final List<String> parentHashes;
   final String body;
   final bool bodyTruncated;
+  final List<GitCommitFile> files;
+  final bool filesTruncated;
 
   bool get isMerge => parentHashes.length > 1;
 
+  GitCommit withFiles(
+    List<GitCommitFile> value, {
+    bool filesTruncated = false,
+  }) => GitCommit(
+    hash: hash,
+    shortHash: shortHash,
+    subject: subject,
+    authorName: authorName,
+    authorEmail: authorEmail,
+    authorDate: authorDate,
+    parentHashes: parentHashes,
+    body: body,
+    bodyTruncated: bodyTruncated,
+    files: value,
+    filesTruncated: filesTruncated,
+  );
+
   @override
   String toString() => 'GitCommit($shortHash $subject)';
+}
+
+/// Pagina de commits solicitada por `loadMoreCommits`.
+class GitCommitPage {
+  const GitCommitPage({required this.commits, required this.hasMore});
+
+  final List<GitCommit> commits;
+  final bool hasMore;
 }
 
 /// Snapshot somente leitura de um repositorio Git na raiz vinculada.
@@ -162,6 +203,7 @@ class GitClient {
   static const maxCommitsDefault = 100;
   static const _executable = 'git';
   static const _maxBodyLength = 4000;
+  static const _maxFilesPerCommit = 100;
 
   final GitProcessRunner _processRunner;
   final Duration timeout;
@@ -252,18 +294,9 @@ class GitClient {
     var commits = const <GitCommit>[];
     var commitsTruncated = false;
     if (status.headOid != null) {
-      final logResult = await _run(root, [
-        'log',
-        '--format=%H%x00%h%x00%s%x00%an%x00%ae%x00%aI%x00%P%x00%b%x00',
-        '-z',
-        '--max-count=${maxCommits + 1}',
-      ]);
-      if (logResult.exitCode != 0) {
-        throw GitException(_failureMessage('git log', logResult));
-      }
-      final parsed = _parseLog(logResult.stdout as String);
-      commitsTruncated = parsed.length > maxCommits;
-      commits = commitsTruncated ? parsed.sublist(0, maxCommits) : parsed;
+      final log = await _loadLog(root, skip: 0, count: maxCommits);
+      commits = log.commits;
+      commitsTruncated = log.truncated;
     }
 
     return GitSnapshot(
@@ -291,6 +324,68 @@ class GitClient {
       commitsTruncated: commitsTruncated,
       worktree: status.worktree,
     );
+  }
+
+  /// Carrega a proxima pagina de commits do historico, preservando a ordem
+  /// do snapshot. Nunca duplica hashes: [skip] e o numero de commits ja
+  /// carregados e [count] o tamanho da pagina.
+  Future<GitCommitPage> loadMoreCommits(
+    Directory root, {
+    required int skip,
+    required int count,
+  }) async {
+    if (count <= 0) {
+      throw const GitException('Pagina de commits deve ter tamanho positivo.');
+    }
+    final log = await _loadLog(root, skip: skip, count: count);
+    return GitCommitPage(commits: log.commits, hasMore: log.truncated);
+  }
+
+  Future<({List<GitCommit> commits, bool truncated})> _loadLog(
+    Directory root, {
+    required int skip,
+    required int count,
+  }) async {
+    final metadata = await _run(root, [
+      'log',
+      '--format=%H%x00%h%x00%s%x00%an%x00%ae%x00%aI%x00%P%x00%b%x00',
+      '-z',
+      '--skip=$skip',
+      '--max-count=${count + 1}',
+    ]);
+    if (metadata.exitCode != 0) {
+      throw GitException(_failureMessage('git log', metadata));
+    }
+    var commits = _parseLog(metadata.stdout as String);
+    final truncated = commits.length > count;
+    if (truncated) commits = commits.sublist(0, count);
+
+    final filesResult = await _run(root, [
+      'log',
+      '--name-status',
+      '--format=%x1e',
+      '-z',
+      '--skip=$skip',
+      '--max-count=${count + 1}',
+    ]);
+    if (filesResult.exitCode != 0) {
+      throw GitException(_failureMessage('git log --name-status', filesResult));
+    }
+    final filesByCommit = _parseCommitFiles(filesResult.stdout as String);
+    final attached = <GitCommit>[];
+    for (var index = 0; index < commits.length; index++) {
+      final files = index < filesByCommit.length
+          ? filesByCommit[index]
+          : const <GitCommitFile>[];
+      final filesTruncated = files.length > _maxFilesPerCommit;
+      attached.add(
+        commits[index].withFiles(
+          filesTruncated ? files.sublist(0, _maxFilesPerCommit) : files,
+          filesTruncated: filesTruncated,
+        ),
+      );
+    }
+    return (commits: attached, truncated: truncated);
   }
 
   Future<ProcessResult> _run(Directory root, List<String> arguments) async {
@@ -491,4 +586,33 @@ class GitClient {
     }
     return commits;
   }
+
+  /// Parseia `log --name-status --format=%x1e -z`: o formato imprime `\x1e`
+  /// no fim de cada commit e os arquivos seguem como pares `STATUS\0path\0`
+  /// (com um separador `\0` e uma linha em branco antes do primeiro). Cada
+  /// chunk separado por `\x1e` corresponde a um commit, na mesma ordem da
+  /// saida de metadados.
+  static List<List<GitCommitFile>> _parseCommitFiles(String output) {
+    final chunks = output.split('\x1e');
+    final result = <List<GitCommitFile>>[];
+    for (final chunk in chunks) {
+      if (chunk.isEmpty) continue;
+      var body = chunk;
+      if (body.startsWith('\x00')) body = body.substring(1);
+      if (body.startsWith('\n')) body = body.substring(1);
+      final fields = body.split('\x00');
+      final files = <GitCommitFile>[];
+      for (var index = 0; index + 1 < fields.length; index += 2) {
+        final status = fields[index].trim();
+        if (!_statusCode.hasMatch(status)) break;
+        final path = fields[index + 1];
+        if (path.isEmpty) break;
+        files.add(GitCommitFile(status: status[0], path: path));
+      }
+      result.add(files);
+    }
+    return result;
+  }
+
+  static final RegExp _statusCode = RegExp(r'^[AMDRCTUX](?:\d{0,3})?$');
 }

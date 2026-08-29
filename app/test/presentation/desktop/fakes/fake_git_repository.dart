@@ -8,6 +8,7 @@ import 'package:salvador_desktop/domain/interfaces/git_repository.dart';
 class FakeGitRepository implements GitRepository {
   int loadCallCount = 0;
   Result<GitSnapshot>? nextResult;
+  GitCommitPage? nextPage;
   final List<Completer<Result<GitSnapshot>>> pending = [];
 
   @override
@@ -24,6 +25,20 @@ class FakeGitRepository implements GitRepository {
       completer.complete(queued);
     }
     return completer.future;
+  }
+
+  @override
+  Future<Result<GitCommitPage>> loadMoreCommits({
+    required Directory root,
+    required int skip,
+    required int count,
+  }) async {
+    final page = nextPage;
+    nextPage = null;
+    if (page == null) {
+      return const Result.ok(GitCommitPage(commits: [], hasMore: false));
+    }
+    return Result.ok(page);
   }
 
   /// Completa a requisicao mais antiga pendente com [result], mantendo as

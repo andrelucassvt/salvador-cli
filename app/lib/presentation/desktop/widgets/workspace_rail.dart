@@ -108,11 +108,7 @@ class _RailNavIcon extends StatelessWidget {
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                Icon(
-                  icon,
-                  color: selected ? coral : Colors.white60,
-                  size: 19,
-                ),
+                Icon(icon, color: selected ? coral : Colors.white60, size: 19),
                 if (badge != null)
                   Positioned(
                     right: -12,

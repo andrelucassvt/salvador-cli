@@ -48,9 +48,7 @@ class AppInjector {
     inject.registerLazySingleton<WorkspaceDataSource>(
       () => WorkspaceDataSource(),
     );
-    inject.registerLazySingleton<GitDataSource>(
-      () => GitDataSource(),
-    );
+    inject.registerLazySingleton<GitDataSource>(() => GitDataSource());
 
     // Repositories
     inject.registerLazySingleton<OllamaRepository>(
@@ -83,9 +81,7 @@ class AppInjector {
     inject.registerFactory<FileExplorerCubit>(
       () => FileExplorerCubit(inject<WorkspaceRepository>()),
     );
-    inject.registerFactory<GitCubit>(
-      () => GitCubit(inject<GitRepository>()),
-    );
+    inject.registerFactory<GitCubit>(() => GitCubit(inject<GitRepository>()));
     // Recebe o estado inicial do formulario como parametro: depende dos
     // valores atuais do WorkspaceState no momento em que o dialogo abre,
     // que nao existem em tempo de registro.
