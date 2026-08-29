@@ -78,7 +78,7 @@ A parte 1 já disponibiliza um `GitSnapshot` confiável e um modo Git básico. E
 - [x] Confirmar por teste que `GitGraphPainter.shouldRepaint` retorna falso para dados equivalentes e verdadeiro quando layout ou cores mudam.
 - [x] Confirmar que os elementos desenhados possuem rótulos equivalentes em `Semantics` e que seleção funciona por teclado/tap nos widgets de linha.
 - [x] Verificação: todos os comandos passam e os testes cobrem topologias linear/branch/merge e layouts amplo/compacto.
-- [ ] Checkpoint: commit das mudanças da parte + resumo curto do workspace visual pronto, seguindo direto para a parte 3.
+- [x] Checkpoint: commit das mudanças da parte + resumo curto do workspace visual pronto, seguindo direto para a parte 3. Commit: `4baf466`.
 
 ## Critérios de Sucesso
 
