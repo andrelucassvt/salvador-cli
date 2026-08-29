@@ -47,7 +47,7 @@ class GitActionReviewDialog extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: _isNetwork(proposal)
+                color: _impactCategory(proposal) == _GitImpact.network
                     ? const Color(0xFFEAF4F6)
                     : const Color(0xFFFFEFE9),
                 borderRadius: BorderRadius.circular(9),
@@ -56,11 +56,11 @@ class GitActionReviewDialog extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
-                    _isNetwork(proposal)
-                        ? Icons.cloud_outlined
-                        : Icons.bolt_outlined,
+                    _impactIcon(proposal),
                     size: 15,
-                    color: _isNetwork(proposal) ? ocean : coral,
+                    color: _impactCategory(proposal) == _GitImpact.network
+                        ? ocean
+                        : coral,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -95,25 +95,39 @@ class GitActionReviewDialog extends StatelessWidget {
     );
   }
 
-  static bool _isNetwork(GitActionProposal proposal) =>
-      proposal.type == GitActionType.fetch;
-
-  static String _impact(GitActionProposal proposal) => switch (proposal.type) {
-    GitActionType.fetch =>
-      'Requer acesso a rede: atualiza refs remotas do '
-          'repositorio. O worktree nao muda.',
-    GitActionType.createBranch ||
-    GitActionType.checkoutBranch => 'Altera a branch ativa do worktree local.',
-    GitActionType.stage => 'Adiciona os arquivos selecionados ao index.',
-    GitActionType.unstage => 'Remove os arquivos selecionados do index.',
-    GitActionType.commit =>
-      'Cria um commit local com as mudancas '
-          'preparadas.',
-    GitActionType.merge || GitActionType.rebase =>
-      'Integra a branch '
-          'informada na branch atual; pode deixar conflitos para resolver.',
+  static const _networkTypes = <GitActionType>{
+    GitActionType.fetch,
+    GitActionType.pull,
+    GitActionType.push,
+    GitActionType.pushForce,
   };
+
+  static _GitImpact _impactCategory(GitActionProposal proposal) {
+    if (proposal.risk == GitActionRisk.normal) return _GitImpact.local;
+    return _networkTypes.contains(proposal.type)
+        ? _GitImpact.network
+        : _GitImpact.destructive;
+  }
+
+  static IconData _impactIcon(GitActionProposal proposal) =>
+      switch (_impactCategory(proposal)) {
+        _GitImpact.local => Icons.bolt_outlined,
+        _GitImpact.network => Icons.cloud_outlined,
+        _GitImpact.destructive => Icons.warning_amber_rounded,
+      };
+
+  static String _impact(GitActionProposal proposal) =>
+      switch (_impactCategory(proposal)) {
+        _GitImpact.local =>
+          'Operacao local: executa no repositorio vinculado sem acessar a rede.',
+        _GitImpact.network =>
+          'Requer acesso a rede para comunicar com os remotos do repositorio.',
+        _GitImpact.destructive =>
+          'Operacao destrutiva: pode descartar, sobrescrever ou remover dados Git locais.',
+      };
 }
+
+enum _GitImpact { local, network, destructive }
 
 class _Field extends StatelessWidget {
   const _Field({required this.label, required this.value, required this.icon});

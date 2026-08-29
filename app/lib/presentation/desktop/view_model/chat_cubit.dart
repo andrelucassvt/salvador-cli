@@ -10,11 +10,13 @@ import 'package:salvador_desktop/domain/entities/chat_message_entity.dart';
 import 'package:salvador_desktop/domain/entities/persisted_session_summary_entity.dart';
 import 'package:salvador_desktop/domain/entities/tool_activity_entity.dart';
 import 'package:salvador_desktop/domain/interfaces/chat_repository.dart';
+import 'package:salvador_desktop/domain/interfaces/git_repository.dart';
 import 'package:salvador_desktop/presentation/desktop/view_model/chat_state.dart';
 
 class ChatCubit extends Cubit<ChatState> {
   ChatCubit(
     this._repository, {
+    this.gitRepository,
     DateTime Function()? clock,
     FileAttachmentService? attachments,
   }) : _clock = clock ?? DateTime.now,
@@ -22,10 +24,12 @@ class ChatCubit extends Cubit<ChatState> {
        super(const ChatIdle());
 
   final ChatRepository _repository;
+  final GitRepository? gitRepository;
   final DateTime Function() _clock;
   final FileAttachmentService _attachments;
   StreamSubscription<ToolActivityEntity>? _activitySubscription;
   bool _ready = false;
+  Directory? _root;
 
   void addAttachments(List<String> paths) {
     final current = state as ChatIdle;
@@ -69,6 +73,7 @@ class ChatCubit extends Cubit<ChatState> {
     required AgentPermissions permissions,
     required bool contextFilesEnabled,
   }) {
+    _root = root;
     _repository.configureSession(
       host: host,
       model: model,
@@ -160,6 +165,10 @@ class ChatCubit extends Cubit<ChatState> {
                 warnings: value.warnings,
               ),
             ],
+            pendingProposals: [
+              ...(state as ChatIdle).pendingProposals,
+              ...value.proposals,
+            ],
           ),
         );
     }
@@ -180,6 +189,45 @@ class ChatCubit extends Cubit<ChatState> {
   void clearSession() {
     _repository.clearSession();
     emit(const ChatIdle());
+  }
+
+  /// Remove uma proposta pendente sem executar nenhuma operacao Git.
+  void dismissProposal(GitActionProposal proposal) {
+    final current = state as ChatIdle;
+    emit(
+      current.copyWith(
+        pendingProposals: current.pendingProposals
+            .where((pending) => pending != proposal)
+            .toList(growable: false),
+      ),
+    );
+  }
+
+  /// Executa uma proposta que ja foi revisada pela interface. Falhas mantem a
+  /// proposta para uma nova tentativa e nunca removem a confirmacao pendente.
+  Future<bool> executeProposal(GitActionProposal proposal) async {
+    final root = _root;
+    final repository = gitRepository;
+    if (root == null || repository == null) return false;
+
+    final result = await repository.executeAction(
+      root: root,
+      proposal: proposal,
+    );
+    switch (result) {
+      case Ok():
+        final current = state as ChatIdle;
+        emit(
+          current.copyWith(
+            pendingProposals: current.pendingProposals
+                .where((pending) => pending != proposal)
+                .toList(growable: false),
+          ),
+        );
+        return true;
+      case Error():
+        return false;
+    }
   }
 
   void _onActivity(ToolActivityEntity activity) {

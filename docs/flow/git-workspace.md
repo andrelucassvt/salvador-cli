@@ -1,21 +1,21 @@
 ---
 generated_at: 2026-08-29
-source_commit: 6df9edf
+source_commit: f8fcea4
 source_state: dirty
 verified_at: 2026-08-29
 status: current
-related_plans: ['docs/plan/git-workspace/00-indice.md']
+related_plans: ['docs/plan/git-workspace/00-indice.md', 'docs/plan/git-tool-operations/00-indice.md']
 ---
 
 # Flow: Git Workspace Visual com Assistente Local
 
-> **Resumo:** No desktop, o rail Chat/Git abre um workspace somente leitura do repositório da raiz (branches, grafo, inspector, worktree) e um assistente Ollama dedicado que consulta Git por ferramentas tipadas e só muta após revisão explícita — fetch, criar/trocar branch, stage, unstage, commit, merge e rebase; nunca `run_command`, push, reset hard, clean, delete ou force.
+> **Resumo:** No desktop, o rail Chat/Git abre um workspace visual da raiz e um assistente Ollama dedicado com ferramentas Git tipadas: operações locais normais executam no turno, enquanto rede e operações destrutivas viram propostas revisáveis; a sessão nunca expõe `run_command`.
 
 ## Visão Geral
 
 O usuário escolhe Git no rail esquerdo (`WorkspaceSection.git`). A View já vinculou a raiz ao `GitCubit`, que carrega um `GitSnapshot` via `GitClient` (`Process.run('git', ...)` com runner injetável, sem shell). O repositório só é aceito quando o top-level resolvido coincide com a raiz; pasta sem Git ou repositório acima dela viram estados apresentáveis, sem ações.
 
-No workspace o usuário navega refs, commits e arquivos. “Pedir ao Salvador” abre um drawer com conversa independente do chat principal. O envio serializa só a seleção atual (`serializeGitContext`) e manda a uma `AgentSession` com `GitProfile`: consultas `git_status`/`git_log`/`git_diff`/`git_show` e `propose_git_action`. Mutações não executam no tool call — viram `GitActionProposal` para o `GitActionReviewDialog`. Confirmar chama `GitCubit.executeApproved` → `GitActionExecutor` com argumentos fixos; sucesso recarrega o snapshot, falha preserva os dados e mostra banner. Fetch do cabeçalho usa o mesmo dialog porque envolve rede.
+No workspace o usuário navega refs, commits e arquivos. “Pedir ao Salvador” abre um drawer com conversa independente do chat principal. O envio serializa só a seleção atual (`serializeGitContext`) e manda a uma `AgentSession` com `GitProfile`: consultas `git_status`/`git_log`/`git_diff`/`git_show` e a ferramenta única `git`. A ferramenta executa ações locais normais no turno e registra `GitActionProposal` para ações de rede ou destrutivas. O `GitActionReviewDialog` confirma estas últimas e chama `GitCubit.executeApproved` → `GitActionExecutor` com argumentos fixos; sucesso recarrega o snapshot, falha preserva os dados e mostra banner. Fetch do cabeçalho também entra no dialog porque envolve rede.
 
 ## Passo a Passo
 
@@ -41,10 +41,10 @@ No workspace o usuário navega refs, commits e arquivos. “Pedir ao Salvador”
    Mesmo fluxo seguro de `_ShellScreenState._send`: se o modelo está parado, `WorkspaceCubit.startModel`; só envia se ficar `running`, e afirma readiness no Cubit. Serializa `serializeGitContext(snapshot, selectedRef, selectedCommitHash, selectedFilePath)` e chama `GitAssistantCubit.send`.
 
 8. **Sessão Git da LLM** — `git_assistant_datasource.dart` → `configureSession` / `send`
-   `AgentSession` com `GitProfile()`, `allowCommands: false` (mesmo se as permissões do chat permitem shell) e `allowEdit` copiado para resolver conflitos. O prompt é `contexto + input`. Consultas Git leem pelo `GitClient`; `propose_git_action` valida e acumula `GitActionProposal` em `AgentTurnResult.proposals`, devolvendo “Aguardando aprovacao na interface.” — zero `Process.run` de mutação.
+   `AgentSession` com `GitProfile()`, `allowCommands: false` (mesmo se as permissões do chat permitem shell) e `allowEdit` copiado para resolver conflitos. O prompt é `contexto + input`. Consultas Git leem pelo `GitClient`; a ferramenta `git` valida os argumentos fixos, executa ações normais e registra em `AgentTurnResult.proposals` apenas ações arriscadas, devolvendo “Aguardando aprovacao na interface.” quando a revisão é necessária.
 
 9. **Revisão** — `git_action_review_dialog.dart` → `GitActionReviewDialog`
-   Tipo, ref, caminhos, mensagem e impacto (local vs rede). Abrir o dialog não executa. Cancelar no chip ou no dialog chama `dismissProposal` e não toca `GitRepository.executeAction`.
+   Tipo, ref, caminhos, mensagem e impacto por risco: normal é local; ações arriscadas `fetch`/`pull`/`push`/`pushForce` são de rede; as demais arriscadas são destrutivas. Abrir o dialog não executa. Cancelar no chip ou no dialog chama `dismissProposal` e não toca `GitRepository.executeAction`.
 
 10. **Execução e refresh** — `git_cubit.dart` → `executeApproved`
     Bloqueia concorrência (`executingAction`). `GitRepository.executeAction` → `GitActionExecutor.execute` (`git -C <raiz> <args fixos>`). Sucesso: limpa execução, `refresh()` recarrega branches/grafo/worktree/inspector. Falha: `actionError` no banner, snapshot intacto, drawer e proposta pendente permanecem. Fetch do cabeçalho constrói `GitActionProposal(type: fetch)` e entra no mesmo dialog.
@@ -57,7 +57,7 @@ No workspace o usuário navega refs, commits e arquivos. “Pedir ao Salvador”
 - **Modelo parado no envio do assistente:** `_send` tenta `startModel`; se falhar, o texto fica no composer e nada vai à LLM.
 - **Sessão não pronta:** `GitAssistantCubit.send` emite `GitAssistantErrorKind.sessionNotReady` sem chamar o repositório.
 - **Falha Ollama/agente no assistente:** `GitAssistantErrorKind.sendFailed`; mensagens anteriores permanecem.
-- **Proposta inválida da LLM:** `ProposeGitActionTool` lança `ToolException` → `ERRO: <motivo>` para o modelo corrigir; nada aparece na UI.
+- **Ação Git inválida da LLM:** `GitActionTool` lança `ToolException` → `ERRO: <motivo>` para o modelo corrigir; nada aparece na UI.
 - **Fetch/merge/rebase falha após confirmar:** banner `git-action-error-banner`; sem abort/reset automático.
 - **Detached HEAD:** cabeçalho “HEAD desanexado”; snapshot continua válido.
 
@@ -66,7 +66,7 @@ No workspace o usuário navega refs, commits e arquivos. “Pedir ao Salvador”
 | Camada | Arquivo | Responsabilidade |
 |--------|---------|------------------|
 | Núcleo Git | `lib/src/git.dart` | `GitClient` (snapshot somente leitura), `GitActionType`/`GitActionProposal`, `GitActionExecutor`, `serializeGitContext` |
-| Ferramentas | `lib/src/tools.dart` | `GitProfile`, consultas Git, `ProposeGitActionTool`; `run_command` omitido quando o perfil Git está ativo |
+| Ferramentas | `lib/src/tools.dart` | `GitProfile`, consultas Git e ferramenta tipada `git`; `run_command` omitido quando o perfil Git está ativo |
 | Agente | `lib/src/agent.dart` | `AgentSession` com perfil Git opcional; `AgentTurnResult.proposals` |
 | Domínio | `app/lib/domain/interfaces/git_repository.dart` | Snapshot, paginação e `executeAction` aprovada |
 | Domínio | `app/lib/domain/interfaces/git_assistant_repository.dart` | Sessão dedicada: configure/send/clear + atividades |
@@ -87,8 +87,9 @@ No workspace o usuário navega refs, commits e arquivos. “Pedir ao Salvador”
 
 - **Top-level tem que ser a raiz** — `lib/src/git.dart` (`GitClient.discover`): repositório acima da pasta vinculada não habilita o workspace nem ações.
 - **Git sempre por argv, nunca shell** — `GitClient` e `GitActionExecutor` usam `Process.run('git', argumentos)` com `runInShell: false`.
-- **Mutação só depois da UI** — `ProposeGitActionTool` valida e registra; `GitActionExecutor.execute` só roda em `GitCubit.executeApproved` após Confirmar.
-- **Enum fechado da primeira versão** — `GitActionType`: fetch, createBranch, checkoutBranch, stage, unstage, commit, merge, rebase. Sem reset hard, clean, delete, push ou force.
+- **Risco é fixo no código** — `GitActionType.risk` não vem do modelo: operações normais executam pelo `GitActionTool`; operações arriscadas exigem proposta ou confirmação.
+- **Revisão por impacto** — `GitActionReviewDialog` deriva local/rede/destrutivo de `proposal.risk` e de uma coleção centralizada dos quatro tipos de rede, sem confiar em texto ou argumentos do modelo.
+- **Enum fechado e expandido** — `GitActionType` aceita operações Git suportadas por argumentos fixos, incluindo push, reset, clean, tags, stashes, remotos e ações de recuperação.
 - **Sessão Git sem `run_command`** — `ToolRegistry`: com `GitProfile`, comandos de shell não entram mesmo se `allowCommands` for true; `GitAssistantDataSource` força `allowCommands: false`.
 - **Contexto é a seleção, não o snapshot** — `serializeGitContext` manda resumo + ref/commit/arquivo selecionados, com `[TRUNCADO]` / `[... mais N]`; o system prompt de sete linhas em `prompt.dart` não muda.
 - **Refresh só no sucesso** — `GitCubit.executeApproved`: falha preserva `GitLoaded.snapshot` e preenche `actionError`.

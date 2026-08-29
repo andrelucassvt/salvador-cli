@@ -42,6 +42,10 @@ class ChatAgentDataSource {
       root: root,
       permissions: permissions,
       contextFiles: _contextFiles,
+      gitClient: root == null ? null : GitClient(),
+      gitProfile: root == null
+          ? null
+          : const GitProfile(replacesRunCommand: false),
       onToolResult: (call, result) {
         _activityController.add(ToolActivityEntity(call: call, result: result));
       },
@@ -65,6 +69,7 @@ class ChatAgentDataSource {
       metrics: result.metrics,
       mentionedFiles: result.mentionedFiles,
       warnings: [...expansion.warnings, ...result.warnings],
+      proposals: result.proposals,
     );
   }
 

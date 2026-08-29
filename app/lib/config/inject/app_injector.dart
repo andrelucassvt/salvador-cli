@@ -85,6 +85,7 @@ class AppInjector {
     inject.registerFactory<ChatCubit>(
       () => ChatCubit(
         inject<ChatRepository>(),
+        gitRepository: inject<GitRepository>(),
         attachments: inject<FileAttachmentService>(),
       ),
     );

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:salvador_cli/salvador_cli.dart';
 import 'package:salvador_desktop/domain/entities/attached_file_entity.dart';
 import 'package:salvador_desktop/domain/entities/chat_message_entity.dart';
 import 'package:salvador_desktop/domain/entities/persisted_session_summary_entity.dart';
@@ -22,6 +23,7 @@ class ChatIdle extends ChatState {
   const ChatIdle({
     this.messages = const [],
     this.activities = const [],
+    this.pendingProposals = const [],
     this.pendingAttachments = const [],
     this.sending = false,
     this.sessionFirstPrompt,
@@ -34,6 +36,7 @@ class ChatIdle extends ChatState {
 
   final List<ChatMessageEntity> messages;
   final List<ToolActivityEntity> activities;
+  final List<GitActionProposal> pendingProposals;
   final List<AttachedFileEntity> pendingAttachments;
   final bool sending;
   final String? sessionFirstPrompt;
@@ -59,6 +62,7 @@ class ChatIdle extends ChatState {
   ChatIdle copyWith({
     List<ChatMessageEntity>? messages,
     List<ToolActivityEntity>? activities,
+    List<GitActionProposal>? pendingProposals,
     List<AttachedFileEntity>? pendingAttachments,
     bool? sending,
     String? sessionFirstPrompt,
@@ -70,6 +74,7 @@ class ChatIdle extends ChatState {
     return ChatIdle(
       messages: messages ?? this.messages,
       activities: activities ?? this.activities,
+      pendingProposals: pendingProposals ?? this.pendingProposals,
       pendingAttachments: pendingAttachments ?? this.pendingAttachments,
       sending: sending ?? this.sending,
       sessionFirstPrompt: sessionFirstPrompt ?? this.sessionFirstPrompt,
@@ -82,6 +87,7 @@ class ChatIdle extends ChatState {
   @override
   String toString() =>
       'ChatIdle(messages: ${messages.length}, activities: ${activities.length}, '
+      'pendingProposals: ${pendingProposals.length}, '
       'pendingAttachments: ${pendingAttachments.length}, sending: $sending, '
       'errorKind: $errorKind, error: $error)';
 }

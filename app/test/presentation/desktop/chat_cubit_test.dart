@@ -10,12 +10,15 @@ import 'package:salvador_desktop/presentation/desktop/view_model/chat_cubit.dart
 import 'package:salvador_desktop/presentation/desktop/view_model/chat_state.dart';
 
 import 'fakes/fake_chat_repository.dart';
+import 'fakes/fake_git_repository.dart';
 
 void main() {
   late FakeChatRepository fakeRepository;
+  late FakeGitRepository fakeGitRepository;
 
   setUp(() {
     fakeRepository = FakeChatRepository();
+    fakeGitRepository = FakeGitRepository();
   });
 
   group('ChatCubit.send', () {
@@ -56,6 +59,26 @@ void main() {
     );
 
     blocTest<ChatCubit, ChatState>(
+      'send_whenTurnContainsProposal_addsItToPendingProposals',
+      build: () => ChatCubit(fakeRepository)..updateReadiness(true),
+      act: (cubit) {
+        fakeRepository.reply = const AgentTurnResult(
+          answer: 'proposta registrada',
+          proposals: [GitActionProposal(type: GitActionType.fetch)],
+        );
+        return cubit.send('busque as refs');
+      },
+      expect: () => [
+        isA<ChatIdle>().having((s) => s.sending, 'sending', true),
+        isA<ChatIdle>().having((s) => s.sending, 'sending', false).having(
+          (s) => s.pendingProposals,
+          'pendingProposals',
+          [const GitActionProposal(type: GitActionType.fetch)],
+        ),
+      ],
+    );
+
+    blocTest<ChatCubit, ChatState>(
       'send_whenRepositoryFails_emitsSendFailedKeepingUserMessage',
       build: () => ChatCubit(fakeRepository)..updateReadiness(true),
       act: (cubit) {
@@ -69,6 +92,53 @@ void main() {
             .having((s) => s.errorKind, 'errorKind', ChatErrorKind.sendFailed)
             .having((s) => s.messages, 'messages', hasLength(1)),
       ],
+    );
+  });
+
+  group('ChatCubit.proposals', () {
+    const proposal = GitActionProposal(type: GitActionType.fetch);
+
+    ChatCubit buildAttachedCubit() {
+      final cubit = ChatCubit(fakeRepository, gitRepository: fakeGitRepository);
+      cubit.attachSession(
+        host: Uri.parse('http://127.0.0.1:11434'),
+        model: 'llama3.2:3b',
+        options: const InferenceOptions(),
+        root: Directory('/repo/raiz'),
+        permissions: const AgentPermissions(),
+        contextFilesEnabled: true,
+      );
+      return cubit;
+    }
+
+    blocTest<ChatCubit, ChatState>(
+      'dismissProposal removes it without executing Git',
+      build: buildAttachedCubit,
+      seed: () => const ChatIdle(pendingProposals: [proposal]),
+      act: (cubit) => cubit.dismissProposal(proposal),
+      expect: () => [
+        isA<ChatIdle>().having(
+          (s) => s.pendingProposals,
+          'pendingProposals',
+          isEmpty,
+        ),
+      ],
+      verify: (_) => expect(fakeGitRepository.executedActions, isEmpty),
+    );
+
+    blocTest<ChatCubit, ChatState>(
+      'executeProposal executes displayed proposal once and removes it',
+      build: buildAttachedCubit,
+      seed: () => const ChatIdle(pendingProposals: [proposal]),
+      act: (cubit) => cubit.executeProposal(proposal),
+      expect: () => [
+        isA<ChatIdle>().having(
+          (s) => s.pendingProposals,
+          'pendingProposals',
+          isEmpty,
+        ),
+      ],
+      verify: (_) => expect(fakeGitRepository.executedActions, [proposal]),
     );
   });
 
@@ -195,7 +265,10 @@ void main() {
       build: () {
         final file = File('${tempDir.path}/nota.txt')
           ..writeAsStringSync('conteudo anexado');
-        return ChatCubit(fakeRepository, attachments: const FileAttachmentService())
+        return ChatCubit(
+            fakeRepository,
+            attachments: const FileAttachmentService(),
+          )
           ..updateReadiness(true)
           ..addAttachments([file.path]);
       },
@@ -217,7 +290,10 @@ void main() {
       build: () {
         final file = File('${tempDir.path}/foto.png')
           ..writeAsBytesSync([0, 1, 2, 3]);
-        return ChatCubit(fakeRepository, attachments: const FileAttachmentService())
+        return ChatCubit(
+            fakeRepository,
+            attachments: const FileAttachmentService(),
+          )
           ..updateReadiness(true)
           ..addAttachments([file.path]);
       },
@@ -237,7 +313,10 @@ void main() {
     blocTest<ChatCubit, ChatState>(
       'send_withInvalidAttachment_addsWarningWithoutBlockingSend',
       build: () {
-        return ChatCubit(fakeRepository, attachments: const FileAttachmentService())
+        return ChatCubit(
+            fakeRepository,
+            attachments: const FileAttachmentService(),
+          )
           ..updateReadiness(true)
           ..addAttachments(['${tempDir.path}/inexistente.txt']);
       },

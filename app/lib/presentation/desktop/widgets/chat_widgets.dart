@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:salvador_cli/salvador_cli.dart';
 import 'package:salvador_desktop/domain/entities/chat_message_entity.dart';
+import 'package:salvador_desktop/presentation/desktop/content/git_action_review_dialog.dart';
 import 'package:salvador_desktop/presentation/desktop/theme/desktop_theme.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/chat_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/view_model/chat_state.dart';
 import 'package:salvador_desktop/presentation/desktop/widgets/file_chip.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -418,6 +422,131 @@ class ErrorBanner extends StatelessWidget {
               message,
               style: const TextStyle(color: ink, fontSize: 12),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Propostas Git arriscadas emitidas pelo agente no chat principal. A acao
+/// permanece pendente ate o usuario revisar e confirmar ou cancelar.
+class ChatPendingProposals extends StatelessWidget {
+  const ChatPendingProposals({super.key});
+
+  Future<void> _review(BuildContext context, GitActionProposal proposal) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => GitActionReviewDialog(proposal: proposal),
+    );
+    if (confirmed != true || !context.mounted) return;
+    await context.read<ChatCubit>().executeProposal(proposal);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<ChatCubit, ChatState>(
+      builder: (context, state) {
+        final proposals = (state as ChatIdle).pendingProposals;
+        if (proposals.isEmpty) return const SizedBox.shrink();
+        return Container(
+          key: const Key('chat-pending-proposals'),
+          width: double.infinity,
+          margin: const EdgeInsets.fromLTRB(28, 20, 28, 0),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFEFE9),
+            border: Border.all(color: const Color(0xFFF2C8BA)),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'PROPOSTAS GIT PENDENTES',
+                style: TextStyle(
+                  color: coral,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.1,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (var index = 0; index < proposals.length; index++)
+                    _ChatGitProposalChip(
+                      key: Key('chat-git-proposal-$index'),
+                      proposal: proposals[index],
+                      onReview: () => _review(context, proposals[index]),
+                      onCancel: () => context.read<ChatCubit>().dismissProposal(
+                        proposals[index],
+                      ),
+                      index: index,
+                    ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ChatGitProposalChip extends StatelessWidget {
+  const _ChatGitProposalChip({
+    super.key,
+    required this.proposal,
+    required this.onReview,
+    required this.onCancel,
+    required this.index,
+  });
+
+  final GitActionProposal proposal;
+  final VoidCallback onReview;
+  final VoidCallback onCancel;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 460),
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: paper,
+        border: Border.all(color: line),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: Text(
+                proposal.summary,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: ink,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          TextButton(
+            key: Key('chat-review-proposal-$index'),
+            onPressed: onReview,
+            child: const Text('Revisar'),
+          ),
+          TextButton(
+            key: Key('chat-cancel-proposal-$index'),
+            onPressed: onCancel,
+            child: const Text('Cancelar'),
           ),
         ],
       ),
