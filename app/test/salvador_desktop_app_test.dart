@@ -181,7 +181,7 @@ void main() {
     await tester.tap(find.text(other.path));
     await tester.pumpAndSettle();
     expect(
-      (harness.workspaceCubit.state as WorkspaceReady).root.path,
+      (harness.workspaceCubit.state as WorkspaceReady).root!.path,
       other.path,
     );
   });

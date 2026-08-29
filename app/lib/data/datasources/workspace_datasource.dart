@@ -38,12 +38,7 @@ class WorkspaceDataSource {
     return _mentions!.suggest(active.query, limit: limit);
   }
 
-  String insertMention(
-    Directory root,
-    String input,
-    int cursor,
-    String path,
-  ) {
+  String insertMention(Directory root, String input, int cursor, String path) {
     _ensureContext(root);
     final active = _mentions!.activeMention(input, cursor);
     if (active == null) return input;
@@ -74,7 +69,9 @@ class WorkspaceDataSource {
       final aDir = a is Directory;
       final bDir = b is Directory;
       if (aDir != bDir) return aDir ? -1 : 1;
-      return _entityName(a).toLowerCase().compareTo(_entityName(b).toLowerCase());
+      return _entityName(
+        a,
+      ).toLowerCase().compareTo(_entityName(b).toLowerCase());
     });
 
     for (final child in children) {
@@ -83,7 +80,11 @@ class WorkspaceDataSource {
       if (child is Directory) {
         if (FileMentionService.ignoredDirectories.contains(name)) continue;
         entries.add(
-          WorkspaceTreeEntryEntity(path: relative, depth: depth, isDirectory: true),
+          WorkspaceTreeEntryEntity(
+            path: relative,
+            depth: depth,
+            isDirectory: true,
+          ),
         );
         _visitDirectory(child, relative, depth + 1, entries);
       } else if (child is File) {

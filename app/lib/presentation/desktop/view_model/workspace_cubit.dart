@@ -22,7 +22,7 @@ class WorkspaceCubit extends Cubit<WorkspaceState> {
        super(
          WorkspaceReady(
            host: initialHost ?? Uri.parse('http://127.0.0.1:11434'),
-           root: (initialRoot ?? Directory.current).absolute,
+           root: initialRoot?.absolute,
          ),
        );
 
@@ -36,7 +36,7 @@ class WorkspaceCubit extends Cubit<WorkspaceState> {
   Future<void> initialize() async {
     final saved = await _storage.load();
     final current = state as WorkspaceReady;
-    var root = current.root;
+    Directory? root;
     final savedRoot = saved.activeRoot;
     if (savedRoot != null && Directory(savedRoot).existsSync()) {
       root = Directory(savedRoot).absolute;
@@ -83,14 +83,24 @@ class WorkspaceCubit extends Cubit<WorkspaceState> {
     await _persist();
   }
 
+  /// Desvincula o projeto atual: o chat continua liberado, so sem ferramentas
+  /// de arquivo/comando (que dependem de uma raiz confinada).
+  Future<void> clearRoot() async {
+    final current = state;
+    if (current is! WorkspaceReady) return;
+    emit(current.copyWith(clearRoot: true, clearError: true));
+    await _persist();
+  }
+
   Future<void> selectModel(String? model) async {
     final current = state;
     if (current is! WorkspaceReady) return;
     if (model == null || model == current.selectedModel) return;
     // Selecionar nao inicia o modelo: o estado deriva dos modelos ja em
     // execucao; o start acontece so pelo botao ou ao enviar uma mensagem.
-    final running = current.runningModels.any((runningModel) =>
-        runningModel.name == model);
+    final running = current.runningModels.any(
+      (runningModel) => runningModel.name == model,
+    );
     emit(
       current.copyWith(
         selectedModel: model,
@@ -187,7 +197,9 @@ class WorkspaceCubit extends Cubit<WorkspaceState> {
     final current = state;
     if (current is! WorkspaceReady) return;
     final parsedHost = Uri.tryParse(hostText.trim());
-    if (parsedHost == null || !parsedHost.hasScheme || parsedHost.host.isEmpty) {
+    if (parsedHost == null ||
+        !parsedHost.hasScheme ||
+        parsedHost.host.isEmpty) {
       emit(
         current.copyWith(
           errorKind: WorkspaceErrorKind.invalidHost,
@@ -359,7 +371,8 @@ class WorkspaceCubit extends Cubit<WorkspaceState> {
       ok: (r) => r,
       error: (_) => current.runningModels,
     );
-    final modelState = running.any((model) => model.name == current.selectedModel)
+    final modelState =
+        running.any((model) => model.name == current.selectedModel)
         ? WorkspaceModelState.running
         : WorkspaceModelState.stopped;
     emit(current.copyWith(runningModels: running, modelState: modelState));
@@ -373,7 +386,7 @@ class WorkspaceCubit extends Cubit<WorkspaceState> {
         model: current.selectedModel,
         inference: current.inference,
         permissions: current.permissions,
-        activeRoot: current.root.path,
+        activeRoot: current.root?.path,
         recentRoots: current.recentRoots.length > _maxRecentRoots
             ? current.recentRoots.sublist(0, _maxRecentRoots)
             : current.recentRoots,

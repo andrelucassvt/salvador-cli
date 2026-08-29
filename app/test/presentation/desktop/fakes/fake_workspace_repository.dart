@@ -12,11 +12,15 @@ class FakeWorkspaceRepository implements WorkspaceRepository {
   FilePreviewEntity? previewToReturn;
   List<String> suggestionsToReturn = const [];
   String insertMentionResult = '';
+  int listTreeCallCount = 0;
 
   @override
   Future<Result<List<WorkspaceTreeEntryEntity>>> listTree({
     required Directory root,
-  }) async => Result.ok(tree);
+  }) async {
+    listTreeCallCount++;
+    return Result.ok(tree);
+  }
 
   @override
   Future<Result<FilePreviewEntity>> readFile({

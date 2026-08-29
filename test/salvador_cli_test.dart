@@ -63,6 +63,25 @@ void main() {
     expect(File('${root.parent.path}/escape.txt').existsSync(), isFalse);
   });
 
+  test('sem raiz, o registro nao expoe nenhuma ferramenta', () {
+    final registry = ToolRegistry(null);
+
+    expect(registry.definitions, isEmpty);
+  });
+
+  test('sessao sem raiz nao anuncia ferramentas nem menciona Raiz', () async {
+    final client = FakeChatClient([
+      AgentMessage(role: 'assistant', content: 'resposta sem workspace'),
+    ]);
+    final session = AgentSession(client: client);
+
+    final answer = await session.send('oi');
+
+    expect(answer, 'resposta sem workspace');
+    expect(client.toolRequests.single, isEmpty);
+    expect(client.requests.single.first.content, isNot(contains('Raiz:')));
+  });
+
   test('aceita argumentos de tool call serializados como JSON', () {
     final call = ToolCall.fromJson({
       'function': {'name': 'read_file', 'arguments': '{"path":"README.md"}'},

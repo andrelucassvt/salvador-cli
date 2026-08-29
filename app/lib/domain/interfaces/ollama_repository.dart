@@ -17,10 +17,7 @@ abstract class OllamaRepository {
     required Duration keepAlive,
   });
 
-  Future<Result<void>> unloadModel({
-    required Uri host,
-    required String model,
-  });
+  Future<Result<void>> unloadModel({required Uri host, required String model});
 
   Future<Result<int?>> showModelContext({
     required Uri host,

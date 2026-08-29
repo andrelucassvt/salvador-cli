@@ -26,7 +26,9 @@ class AppInjector {
     inject.registerLazySingleton<DesktopStorageService>(
       () => DesktopStorageService(),
     );
-    inject.registerLazySingleton<SystemMemoryReader>(() => SystemMemoryReader());
+    inject.registerLazySingleton<SystemMemoryReader>(
+      () => SystemMemoryReader(),
+    );
 
     // DataSources
     inject.registerLazySingleton<OllamaRemoteDataSource>(

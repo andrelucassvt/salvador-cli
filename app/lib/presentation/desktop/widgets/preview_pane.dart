@@ -163,7 +163,11 @@ class _PreviewLine extends StatelessWidget {
 }
 
 class PreviewErrorPane extends StatelessWidget {
-  const PreviewErrorPane({super.key, required this.message, required this.onClose});
+  const PreviewErrorPane({
+    super.key,
+    required this.message,
+    required this.onClose,
+  });
 
   final String message;
   final VoidCallback onClose;
@@ -186,7 +190,11 @@ class PreviewErrorPane extends StatelessWidget {
               const SizedBox(width: 8),
               const Text(
                 'Não foi possível abrir o preview',
-                style: TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: ink,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const Spacer(),
               IconButton(
@@ -202,7 +210,11 @@ class PreviewErrorPane extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           child: Text(
             message,
-            style: const TextStyle(color: ink, fontSize: 12.5, fontFamily: 'JetBrains Mono'),
+            style: const TextStyle(
+              color: ink,
+              fontSize: 12.5,
+              fontFamily: 'JetBrains Mono',
+            ),
           ),
         ),
       ],

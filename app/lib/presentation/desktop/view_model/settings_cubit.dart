@@ -27,7 +27,8 @@ class SettingsCubit extends Cubit<SettingsState> {
 
   final OllamaRepository _ollamaRepository;
 
-  void updateHostText(String value) => _update((s) => s.copyWith(hostText: value));
+  void updateHostText(String value) =>
+      _update((s) => s.copyWith(hostText: value));
 
   void updateTemperature(double value) =>
       _update((s) => s.copyWith(temperature: value));
@@ -42,7 +43,8 @@ class SettingsCubit extends Cubit<SettingsState> {
   void updateTimeout(Duration? value) =>
       _update((s) => s.copyWith(timeout: value, clearTimeout: value == null));
 
-  void updateAllowEdit(bool value) => _update((s) => s.copyWith(allowEdit: value));
+  void updateAllowEdit(bool value) =>
+      _update((s) => s.copyWith(allowEdit: value));
 
   void updateAllowCommands(bool value) =>
       _update((s) => s.copyWith(allowCommands: value));

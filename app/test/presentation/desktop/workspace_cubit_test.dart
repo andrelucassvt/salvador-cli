@@ -95,10 +95,27 @@ void main() {
       verify: (_) {
         expect(fakeStorage.saveCallCount, greaterThan(0));
         expect(fakeStorage.lastSaved!.activeRoot, otherRoot.path);
-        expect(
-          fakeStorage.lastSaved!.recentRoots,
-          [otherRoot.path, root.path],
-        );
+        expect(fakeStorage.lastSaved!.recentRoots, [otherRoot.path, root.path]);
+      },
+    );
+  });
+
+  group('WorkspaceCubit.clearRoot', () {
+    blocTest<WorkspaceCubit, WorkspaceState>(
+      'clearRoot_removesRootAndPersistsNull',
+      build: buildCubit,
+      seed: () => WorkspaceReady(
+        host: Uri.parse('http://127.0.0.1:11434'),
+        root: root,
+        recentRoots: [root.path],
+      ),
+      act: (cubit) => cubit.clearRoot(),
+      expect: () => [
+        isA<WorkspaceReady>().having((s) => s.root, 'root', isNull),
+      ],
+      verify: (_) {
+        expect(fakeStorage.saveCallCount, greaterThan(0));
+        expect(fakeStorage.lastSaved!.activeRoot, isNull);
       },
     );
   });

@@ -44,7 +44,11 @@ class WorkspaceRepositoryImpl implements WorkspaceRepository {
       return Result.ok(_dataSource.listTree(root));
     } catch (error, stackTrace) {
       return Result.error(
-        UnknownException('Falha inesperada', cause: error, stackTrace: stackTrace),
+        UnknownException(
+          'Falha inesperada',
+          cause: error,
+          stackTrace: stackTrace,
+        ),
       );
     }
   }
@@ -70,7 +74,11 @@ class WorkspaceRepositoryImpl implements WorkspaceRepository {
       );
     } catch (error, stackTrace) {
       return Result.error(
-        UnknownException('Falha inesperada', cause: error, stackTrace: stackTrace),
+        UnknownException(
+          'Falha inesperada',
+          cause: error,
+          stackTrace: stackTrace,
+        ),
       );
     }
   }

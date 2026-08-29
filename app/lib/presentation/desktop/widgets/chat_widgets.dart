@@ -12,7 +12,7 @@ class EmptyState extends StatelessWidget {
   });
 
   final bool ready;
-  final String rootPath;
+  final String? rootPath;
   final ValueChanged<String> onPrompt;
 
   @override
@@ -55,8 +55,10 @@ class EmptyState extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 ready
-                    ? 'O agente pode ler, editar e executar comandos somente em $rootPath.'
-                    : 'Confirme o servidor, a pasta e o modelo para começar.',
+                    ? (rootPath != null
+                          ? 'O agente pode ler, editar e executar comandos somente em $rootPath.'
+                          : 'Nenhum projeto vinculado — o agente responde sem acesso a arquivos ou comandos.')
+                    : 'Confirme o servidor e o modelo para começar.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: muted, fontSize: 14, height: 1.5),
               ),

@@ -28,7 +28,7 @@ class ChatCubit extends Cubit<ChatState> {
     required Uri host,
     required String model,
     required InferenceOptions options,
-    required Directory root,
+    required Directory? root,
     required AgentPermissions permissions,
   }) {
     _repository.configureSession(

@@ -39,7 +39,7 @@ class WorkspaceInitial extends WorkspaceState {
 class WorkspaceReady extends WorkspaceState {
   const WorkspaceReady({
     required this.host,
-    required this.root,
+    this.root,
     this.connecting = false,
     this.modelState = WorkspaceModelState.stopped,
     this.models = const [],
@@ -54,7 +54,7 @@ class WorkspaceReady extends WorkspaceState {
   });
 
   final Uri host;
-  final Directory root;
+  final Directory? root;
   final bool connecting;
   final WorkspaceModelState modelState;
   final List<OllamaModelInfo> models;
@@ -70,6 +70,7 @@ class WorkspaceReady extends WorkspaceState {
   WorkspaceReady copyWith({
     Uri? host,
     Directory? root,
+    bool clearRoot = false,
     bool? connecting,
     WorkspaceModelState? modelState,
     List<OllamaModelInfo>? models,
@@ -86,7 +87,7 @@ class WorkspaceReady extends WorkspaceState {
   }) {
     return WorkspaceReady(
       host: host ?? this.host,
-      root: root ?? this.root,
+      root: clearRoot ? null : (root ?? this.root),
       connecting: connecting ?? this.connecting,
       modelState: modelState ?? this.modelState,
       models: models ?? this.models,
@@ -105,7 +106,7 @@ class WorkspaceReady extends WorkspaceState {
 
   @override
   String toString() =>
-      'WorkspaceReady(host: $host, root: ${root.path}, connecting: '
+      'WorkspaceReady(host: $host, root: ${root?.path}, connecting: '
       '$connecting, modelState: $modelState, selectedModel: $selectedModel, '
       'errorKind: $errorKind, error: $error)';
 }

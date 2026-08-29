@@ -16,6 +16,7 @@ class FakeChatRepository implements ChatRepository {
   int configureCallCount = 0;
   int clearCallCount = 0;
   String? lastMessage;
+  Directory? lastRoot;
 
   @override
   Stream<ToolActivityEntity> get toolActivity => activityController.stream;
@@ -25,10 +26,11 @@ class FakeChatRepository implements ChatRepository {
     required Uri host,
     required String model,
     required InferenceOptions options,
-    required Directory root,
+    required Directory? root,
     required AgentPermissions permissions,
   }) {
     configureCallCount++;
+    lastRoot = root;
   }
 
   @override

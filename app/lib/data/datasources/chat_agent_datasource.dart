@@ -24,10 +24,14 @@ class ChatAgentDataSource {
     required Uri host,
     required String model,
     required InferenceOptions options,
-    required Directory root,
+    required Directory? root,
     required AgentPermissions permissions,
   }) {
-    final client = _clientFactory(model: model, baseUrl: host, options: options);
+    final client = _clientFactory(
+      model: model,
+      baseUrl: host,
+      options: options,
+    );
     _session = AgentSession(
       client: client,
       root: root,

@@ -17,12 +17,17 @@ class FileExplorerCubit extends Cubit<FileExplorerState> {
   String _fileFilter = '';
   String? _selectedPath;
 
-  Future<void> setRoot(Directory root) async {
+  Future<void> setRoot(Directory? root) async {
     _root = root;
     _entriesByPath.clear();
     _entriesInOrder.clear();
     _fileFilter = '';
     _selectedPath = null;
+
+    if (root == null) {
+      emit(const FileExplorerLoaded());
+      return;
+    }
 
     final result = await _repository.listTree(root: root);
     switch (result) {
@@ -46,7 +51,9 @@ class FileExplorerCubit extends Cubit<FileExplorerState> {
       (candidate) => candidate.path == path,
     );
     if (index >= 0) _entriesInOrder[index] = updated;
-    emit((state as FileExplorerLoaded).copyWith(treeEntries: _visibleEntries()));
+    emit(
+      (state as FileExplorerLoaded).copyWith(treeEntries: _visibleEntries()),
+    );
   }
 
   void setFileFilter(String query) {

@@ -267,7 +267,7 @@ class _ShellScreenState extends State<_ShellScreen> {
               if (current is! WorkspaceReady) return false;
               if (previous is! WorkspaceReady) return true;
               if (previous.connecting && !current.connecting) return true;
-              return previous.root.path != current.root.path ||
+              return previous.root?.path != current.root?.path ||
                   previous.host != current.host ||
                   previous.selectedModel != current.selectedModel ||
                   previous.permissions != current.permissions;
@@ -431,8 +431,8 @@ class _ShellScreenState extends State<_ShellScreen> {
                   return EmptyState(
                     ready: _isReadyToSend(workspaceState),
                     rootPath: workspaceState is WorkspaceReady
-                        ? workspaceState.root.path
-                        : '',
+                        ? workspaceState.root?.path
+                        : null,
                     onPrompt: (text) {
                       _promptController.text = text;
                       _promptController.selection = TextSelection.collapsed(

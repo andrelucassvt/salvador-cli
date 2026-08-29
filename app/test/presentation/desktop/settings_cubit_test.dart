@@ -90,15 +90,16 @@ void main() {
         initial: initialState().copyWith(hostText: 'nao-e-url'),
       ),
       act: (cubit) => cubit.save(
-        onSave: ({
-          required hostText,
-          required temperature,
-          required contextLength,
-          required keepAlive,
-          required timeout,
-          required allowEdit,
-          required allowCommands,
-        }) async => fail('onSave nao deveria ser chamado'),
+        onSave:
+            ({
+              required hostText,
+              required temperature,
+              required contextLength,
+              required keepAlive,
+              required timeout,
+              required allowEdit,
+              required allowCommands,
+            }) async => fail('onSave nao deveria ser chamado'),
       ),
       expect: () => [
         isA<SettingsEditing>().having(
@@ -113,15 +114,16 @@ void main() {
       'save_whenOnSaveSucceeds_emitsSaved',
       build: () => SettingsCubit(fakeRepository, initial: initialState()),
       act: (cubit) => cubit.save(
-        onSave: ({
-          required hostText,
-          required temperature,
-          required contextLength,
-          required keepAlive,
-          required timeout,
-          required allowEdit,
-          required allowCommands,
-        }) async => true,
+        onSave:
+            ({
+              required hostText,
+              required temperature,
+              required contextLength,
+              required keepAlive,
+              required timeout,
+              required allowEdit,
+              required allowCommands,
+            }) async => true,
       ),
       expect: () => [
         isA<SettingsEditing>().having((s) => s.saving, 'saving', true),
@@ -135,15 +137,16 @@ void main() {
       'save_whenOnSaveFails_emitsSaveFailedKeepingEdits',
       build: () => SettingsCubit(fakeRepository, initial: initialState()),
       act: (cubit) => cubit.save(
-        onSave: ({
-          required hostText,
-          required temperature,
-          required contextLength,
-          required keepAlive,
-          required timeout,
-          required allowEdit,
-          required allowCommands,
-        }) async => false,
+        onSave:
+            ({
+              required hostText,
+              required temperature,
+              required contextLength,
+              required keepAlive,
+              required timeout,
+              required allowEdit,
+              required allowCommands,
+            }) async => false,
       ),
       expect: () => [
         isA<SettingsEditing>().having((s) => s.saving, 'saving', true),

@@ -33,15 +33,17 @@ class AgentPermissions {
 
 class ToolRegistry {
   ToolRegistry(
-    Directory root, {
+    Directory? root, {
     AgentPermissions permissions = const AgentPermissions(),
   }) : _permissions = permissions,
-       _tools = [
-         ReadFileTool(root),
-         if (permissions.allowEdit) WriteFileTool(root),
-         if (permissions.allowEdit) ReplaceInFileTool(root),
-         if (permissions.allowCommands) RunCommandTool(root),
-       ];
+       _tools = root == null
+           ? const []
+           : [
+               ReadFileTool(root),
+               if (permissions.allowEdit) WriteFileTool(root),
+               if (permissions.allowEdit) ReplaceInFileTool(root),
+               if (permissions.allowCommands) RunCommandTool(root),
+             ];
 
   final AgentPermissions _permissions;
   final List<AgentTool> _tools;

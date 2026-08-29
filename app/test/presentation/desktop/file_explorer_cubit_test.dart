@@ -45,6 +45,28 @@ void main() {
         ),
       ],
     );
+
+    blocTest<FileExplorerCubit, FileExplorerState>(
+      'setRoot_withNull_clearsTreeWithoutCallingRepository',
+      build: () => FileExplorerCubit(fakeRepository),
+      act: (cubit) async {
+        fakeRepository.tree = const [
+          WorkspaceTreeEntryEntity(path: 'src', depth: 0, isDirectory: true),
+        ];
+        await cubit.setRoot(root);
+        fakeRepository.listTreeCallCount = 0;
+        await cubit.setRoot(null);
+      },
+      skip: 1,
+      expect: () => [
+        isA<FileExplorerLoaded>().having(
+          (s) => s.treeEntries,
+          'treeEntries',
+          isEmpty,
+        ),
+      ],
+      verify: (_) => expect(fakeRepository.listTreeCallCount, 0),
+    );
   });
 
   group('FileExplorerCubit.toggleDirectory', () {

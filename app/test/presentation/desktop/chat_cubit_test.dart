@@ -93,6 +93,22 @@ void main() {
       ],
       verify: (_) => expect(fakeRepository.configureCallCount, 1),
     );
+
+    blocTest<ChatCubit, ChatState>(
+      'attachSession_withoutRoot_stillConfiguresSession',
+      build: () => ChatCubit(fakeRepository),
+      act: (cubit) => cubit.attachSession(
+        host: Uri.parse('http://127.0.0.1:11434'),
+        model: 'llama3.2:3b',
+        options: const InferenceOptions(),
+        root: null,
+        permissions: const AgentPermissions(),
+      ),
+      verify: (_) {
+        expect(fakeRepository.configureCallCount, 1);
+        expect(fakeRepository.lastRoot, isNull);
+      },
+    );
   });
 
   group('ChatCubit.newSession', () {

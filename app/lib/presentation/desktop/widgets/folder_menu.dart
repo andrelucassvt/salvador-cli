@@ -11,11 +11,13 @@ class FolderMenu extends StatelessWidget {
   final WorkspaceCubit cubit;
 
   String get _shortPath {
-    final parts = state.root.path
+    final root = state.root;
+    if (root == null) return 'Nenhum projeto';
+    final parts = root.path
         .split(RegExp(r'[/\\]'))
         .where((part) => part.isNotEmpty)
         .toList();
-    if (parts.length <= 2) return state.root.path;
+    if (parts.length <= 2) return root.path;
     return '…/${parts.sublist(parts.length - 2).join('/')}';
   }
 
@@ -44,7 +46,7 @@ class FolderMenu extends StatelessWidget {
               ...recents.map(
                 (path) => _FolderMenuItem(
                   path: path,
-                  active: path == state.root.path,
+                  active: path == state.root?.path,
                   onTap: () => cubit.selectRoot(path),
                 ),
               ),
@@ -54,7 +56,7 @@ class FolderMenu extends StatelessWidget {
                 child: MenuItemButton(
                   onPressed: () async {
                     final selected = await getDirectoryPath(
-                      initialDirectory: state.root.path,
+                      initialDirectory: state.root?.path,
                       confirmButtonText: 'Usar esta pasta',
                     );
                     if (selected != null) await cubit.selectRoot(selected);
@@ -65,6 +67,19 @@ class FolderMenu extends StatelessWidget {
                     color: ocean,
                   ),
                   child: const Text('Escolher outra pasta…'),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
+                child: MenuItemButton(
+                  key: const Key('clear-project-menu-item'),
+                  onPressed: state.root == null ? null : cubit.clearRoot,
+                  leadingIcon: const Icon(
+                    Icons.link_off_rounded,
+                    size: 18,
+                    color: muted,
+                  ),
+                  child: const Text('Nenhum projeto'),
                 ),
               ),
             ],

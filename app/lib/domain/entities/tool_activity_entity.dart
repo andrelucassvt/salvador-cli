@@ -3,8 +3,11 @@ import 'package:salvador_cli/salvador_cli.dart';
 
 @immutable
 class ToolActivityEntity {
-  ToolActivityEntity({required this.call, required this.result, DateTime? happenedAt})
-    : happenedAt = happenedAt ?? DateTime.now();
+  ToolActivityEntity({
+    required this.call,
+    required this.result,
+    DateTime? happenedAt,
+  }) : happenedAt = happenedAt ?? DateTime.now();
 
   final ToolCall call;
   final String result;

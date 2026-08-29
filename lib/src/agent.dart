@@ -12,23 +12,25 @@ typedef ToolResultObserver = void Function(ToolCall call, String result);
 class AgentSession {
   AgentSession({
     required this.client,
-    required Directory root,
+    Directory? root,
     this.maxToolRounds = 8,
     this.onToolCall,
     this.onToolResult,
     AgentPermissions permissions = const AgentPermissions(),
   }) : _tools = ToolRegistry(root, permissions: permissions),
-       _mentions = FileMentionService(root),
+       _mentions = root == null ? null : FileMentionService(root),
        _systemMessage = AgentMessage(
          role: 'system',
-         content: '$systemPrompt\nRaiz: ${root.absolute.path}',
+         content: root == null
+             ? systemPrompt
+             : '$systemPrompt\nRaiz: ${root.absolute.path}',
        ) {
     clear();
   }
 
   final ChatClient client;
   final ToolRegistry _tools;
-  final FileMentionService _mentions;
+  final FileMentionService? _mentions;
   final AgentMessage _systemMessage;
   final int maxToolRounds;
   final ToolCallObserver? onToolCall;
@@ -47,7 +49,8 @@ class AgentSession {
 
   Future<AgentTurnResult> sendDetailed(String input) async {
     if (input.trim().isEmpty) return const AgentTurnResult(answer: '');
-    final expansion = _mentions.expand(input);
+    final expansion =
+        _mentions?.expand(input) ?? MentionExpansion(prompt: input);
     _messages.add(AgentMessage(role: 'user', content: expansion.prompt));
     InferenceMetrics? combinedMetrics;
 

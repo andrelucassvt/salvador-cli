@@ -24,10 +24,6 @@ class FakeWorkspaceDataSource implements WorkspaceDataSource {
   }) => suggestions;
 
   @override
-  String insertMention(
-    Directory root,
-    String input,
-    int cursor,
-    String path,
-  ) => insertMentionResult;
+  String insertMention(Directory root, String input, int cursor, String path) =>
+      insertMentionResult;
 }

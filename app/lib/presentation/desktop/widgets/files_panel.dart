@@ -21,121 +21,131 @@ class FilesPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fileExplorerCubit = context.read<FileExplorerCubit>();
-    return BlocBuilder<FileExplorerCubit, FileExplorerState>(
-      builder: (context, state) {
-        final loaded = state as FileExplorerLoaded;
-        return Container(
-          key: const Key('files-panel'),
-          decoration: const BoxDecoration(
-            color: shell,
-            border: Border(left: BorderSide(color: line)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 10, 6),
-                child: Row(
-                  children: [
-                    const Text(
-                      'ARQUIVOS',
-                      style: TextStyle(
-                        color: muted,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE7F2F3),
-                        borderRadius: BorderRadius.circular(99),
-                      ),
-                      child: Text(
-                        '${loaded.treeEntries.length}',
-                        style: const TextStyle(
-                          color: ocean,
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w600,
-                          fontFeatures: [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      key: const Key('collapse-files-panel-button'),
-                      tooltip: 'Recolher painel de arquivos',
-                      onPressed: onCollapse,
-                      icon: const Icon(
-                        Icons.menu_open_rounded,
-                        color: muted,
-                        size: 19,
-                      ),
-                    ),
-                  ],
-                ),
+    return BlocBuilder<WorkspaceCubit, WorkspaceState>(
+      builder: (context, workspaceState) {
+        final rootPath = workspaceState is WorkspaceReady
+            ? workspaceState.root?.path
+            : null;
+        return BlocBuilder<FileExplorerCubit, FileExplorerState>(
+          builder: (context, state) {
+            final loaded = state as FileExplorerLoaded;
+            return Container(
+              key: const Key('files-panel'),
+              decoration: const BoxDecoration(
+                color: shell,
+                border: Border(left: BorderSide(color: line)),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-                child: TextField(
-                  key: const Key('file-filter-field'),
-                  controller: filterController,
-                  onChanged: fileExplorerCubit.setFileFilter,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontFamily: 'JetBrains Mono',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 10, 6),
+                    child: Row(
+                      children: [
+                        const Text(
+                          'ARQUIVOS',
+                          style: TextStyle(
+                            color: muted,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE7F2F3),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                          child: Text(
+                            '${loaded.treeEntries.length}',
+                            style: const TextStyle(
+                              color: ocean,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          key: const Key('collapse-files-panel-button'),
+                          tooltip: 'Recolher painel de arquivos',
+                          onPressed: onCollapse,
+                          icon: const Icon(
+                            Icons.menu_open_rounded,
+                            color: muted,
+                            size: 19,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  decoration: const InputDecoration(
-                    hintText: 'Filtrar arquivos…',
-                    prefixIcon: Icon(Icons.search_rounded, size: 17),
-                    isDense: true,
-                  ),
-                ),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: loaded.treeEntries.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'Nenhum arquivo corresponde ao filtro.',
-                          style: TextStyle(color: muted, fontSize: 11),
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        itemCount: loaded.treeEntries.length,
-                        itemBuilder: (context, index) => _TreeRow(
-                          entry: loaded.treeEntries[index],
-                          onToggleDirectory: fileExplorerCubit.toggleDirectory,
-                          onOpenFile: fileExplorerCubit.openPreview,
-                        ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                    child: TextField(
+                      key: const Key('file-filter-field'),
+                      controller: filterController,
+                      onChanged: fileExplorerCubit.setFileFilter,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontFamily: 'JetBrains Mono',
                       ),
-              ),
-              const Divider(height: 1),
-              BlocBuilder<WorkspaceCubit, WorkspaceState>(
-                builder: (context, workspaceState) {
-                  final rootPath = workspaceState is WorkspaceReady
-                      ? workspaceState.root.path
-                      : '';
-                  return Padding(
+                      decoration: const InputDecoration(
+                        hintText: 'Filtrar arquivos…',
+                        prefixIcon: Icon(Icons.search_rounded, size: 17),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: rootPath == null
+                        ? const Center(
+                            child: Text(
+                              'Nenhum projeto vinculado.',
+                              style: TextStyle(color: muted, fontSize: 11),
+                            ),
+                          )
+                        : loaded.treeEntries.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'Nenhum arquivo corresponde ao filtro.',
+                              style: TextStyle(color: muted, fontSize: 11),
+                            ),
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            itemCount: loaded.treeEntries.length,
+                            itemBuilder: (context, index) => _TreeRow(
+                              entry: loaded.treeEntries[index],
+                              onToggleDirectory:
+                                  fileExplorerCubit.toggleDirectory,
+                              onOpenFile: fileExplorerCubit.openPreview,
+                            ),
+                          ),
+                  ),
+                  const Divider(height: 1),
+                  Padding(
                     key: const Key('files-scope-footer'),
                     padding: const EdgeInsets.fromLTRB(14, 9, 14, 12),
                     child: Row(
                       children: [
-                        const Icon(
-                          Icons.lock_outline_rounded,
+                        Icon(
+                          rootPath == null
+                              ? Icons.folder_off_outlined
+                              : Icons.lock_outline_rounded,
                           size: 13,
                           color: muted,
                         ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            rootPath,
+                            rootPath ?? 'Nenhum projeto vinculado',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -147,11 +157,11 @@ class FilesPanel extends StatelessWidget {
                         ),
                       ],
                     ),
-                  );
-                },
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );

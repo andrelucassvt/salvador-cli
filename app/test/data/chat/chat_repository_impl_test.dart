@@ -28,19 +28,16 @@ void main() {
     );
   });
 
-  test(
-    'send_whenAgentExceptionThrown_returnsAgentFailureException',
-    () async {
-      fakeDataSource.exceptionToThrow = const AgentException('falhou');
+  test('send_whenAgentExceptionThrown_returnsAgentFailureException', () async {
+    fakeDataSource.exceptionToThrow = const AgentException('falhou');
 
-      final result = await repository.send('oi');
+    final result = await repository.send('oi');
 
-      result.when(
-        ok: (_) => fail('esperava erro'),
-        error: (error) => expect(error, isA<AgentFailureException>()),
-      );
-    },
-  );
+    result.when(
+      ok: (_) => fail('esperava erro'),
+      error: (error) => expect(error, isA<AgentFailureException>()),
+    );
+  });
 
   test('toolActivity_whenDataSourceEmits_repassesEvent', () async {
     final events = <ToolActivityEntity>[];

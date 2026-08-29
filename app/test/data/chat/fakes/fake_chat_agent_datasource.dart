@@ -23,7 +23,7 @@ class FakeChatAgentDataSource implements ChatAgentDataSource {
     required Uri host,
     required String model,
     required InferenceOptions options,
-    required Directory root,
+    required Directory? root,
     required AgentPermissions permissions,
   }) {
     configureCallCount++;
