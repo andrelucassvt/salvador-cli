@@ -208,38 +208,41 @@ class Composer extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            const Spacer(),
-                            Flexible(
-                              child: Text(
-                                'Enter para enviar · Shift+Enter para quebrar linha',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: muted,
-                                  fontSize: 10,
+                            Spacer(),
+                            Row(
+                              spacing: 10,
+                              children: [
+                                Text(
+                                  'Enter para enviar · Shift+Enter para quebrar linha',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: muted,
+                                    fontSize: 10,
+                                  ),
                                 ),
-                              ),
-                            ),
-                            FilledButton(
-                              key: const Key('send-button'),
-                              onPressed: sending || !ready ? null : onSend,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: ocean,
-                                minimumSize: const Size(46, 40),
-                                padding: EdgeInsets.zero,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(11),
+                                FilledButton(
+                                  key: const Key('send-button'),
+                                  onPressed: sending || !ready ? null : onSend,
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: ocean,
+                                    minimumSize: const Size(46, 40),
+                                    padding: EdgeInsets.zero,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(11),
+                                    ),
+                                  ),
+                                  child: sending
+                                      ? const SizedBox.square(
+                                          dimension: 17,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(Icons.arrow_upward_rounded),
                                 ),
-                              ),
-                              child: sending
-                                  ? const SizedBox.square(
-                                      dimension: 17,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.arrow_upward_rounded),
+                              ],
                             ),
                           ],
                         ),
