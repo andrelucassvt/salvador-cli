@@ -1,4 +1,5 @@
 import 'package:get_it/get_it.dart';
+import 'package:salvador_cli/salvador_cli.dart';
 import 'package:salvador_desktop/common/services/desktop_storage_service.dart';
 import 'package:salvador_desktop/common/services/file_attachment_service.dart';
 import 'package:salvador_desktop/common/services/system_memory_service.dart';
@@ -41,6 +42,7 @@ class AppInjector {
     inject.registerLazySingleton<FileAttachmentService>(
       () => const FileAttachmentService(),
     );
+    inject.registerLazySingleton<OllamaDiscovery>(() => OllamaDiscovery());
 
     // DataSources
     inject.registerLazySingleton<OllamaRemoteDataSource>(
@@ -59,7 +61,10 @@ class AppInjector {
 
     // Repositories
     inject.registerLazySingleton<OllamaRepository>(
-      () => OllamaRepositoryImpl(inject<OllamaRemoteDataSource>()),
+      () => OllamaRepositoryImpl(
+        inject<OllamaRemoteDataSource>(),
+        discovery: inject<OllamaDiscovery>(),
+      ),
     );
     inject.registerLazySingleton<ChatRepository>(
       () => ChatRepositoryImpl(inject<ChatAgentDataSource>()),

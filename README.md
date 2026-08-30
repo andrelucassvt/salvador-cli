@@ -1,71 +1,87 @@
 # Leve CLI
 
-Agente de codigo em Dart, leve e 100% local, criado para modelos pequenos
-servidos pelo Ollama.
+O Leve CLI é um agente de código local feito em Dart. Ele conversa com modelos
+servidos pelo [Ollama](https://ollama.com/) e pode trabalhar dentro de uma pasta
+do projeto, lendo, alterando arquivos e executando comandos.
 
-## Estado atual
+O mesmo núcleo é usado por duas interfaces:
 
-O primeiro fluxo vertical esta implementado: na inicializacao, o CLI verifica
-se o Ollama esta instalado, executa `ollama list` e permite selecionar um dos
-modelos encontrados. Depois, conversa com `/api/chat`, oferece ferramentas ao
-modelo e devolve os resultados ate ele produzir a resposta final. As
-ferramentas de arquivo ficam limitadas a raiz escolhida:
+- **CLI interativa** em `bin/`, para usar no terminal;
+- **app desktop Flutter** em `app/`, com chat, arquivos, anexos, configurações
+  e um espaço visual para Git.
 
-- `read_file`: le texto;
-- `write_file`: cria ou sobrescreve texto;
-- `replace_in_file`: faz uma substituicao exata e unica;
-- `run_command`: executa um comando, iniciado na raiz, com timeout de 30 segundos.
+Tudo roda localmente: o projeto não envia prompts ou arquivos para serviços na
+nuvem por conta própria. O modelo escolhido é servido pelo seu Ollama.
 
-> `run_command` nao e um sandbox: o processo conserva as permissoes do usuario.
+## O que ele faz
 
-## Executar
+- conversa com modelos que suportam tool calling;
+- lê, cria, substitui e edita arquivos dentro da raiz do projeto escolhida;
+- executa comandos do sistema quando essa permissão está ativa;
+- entende menções `@arquivo` e inclui o conteúdo do arquivo no contexto;
+- carrega instruções de `AGENTS.md` e skills de `.agents/skills/`;
+- mostra métricas de inferência do Ollama;
+- oferece consultas e ações Git tipadas, com confirmação para ações arriscadas.
 
-Requer Dart 3.12+ e um Ollama ativo com um modelo que suporte tool calling.
+> As ferramentas de arquivo são confinadas à raiz selecionada. Já
+> `run_command` usa as permissões normais do usuário e **não é um sandbox**.
+
+## Requisitos
+
+- Dart 3.12 ou superior;
+- Ollama instalado e em execução em `http://127.0.0.1:11434`;
+- ao menos um modelo instalado que suporte tool calling.
+
+Exemplo de modelo:
 
 ```sh
 ollama pull qwen2.5-coder:3b
+```
+
+## Usar pelo terminal
+
+```sh
 dart pub get
 dart run bin/salvador_cli.dart
 ```
 
-Opcoes:
+Opções principais:
 
 ```text
---model NOME     Pula a selecao interativa (ou OLLAMA_MODEL)
---host URL       Servidor (ou OLLAMA_HOST)
---root CAMINHO   Raiz acessivel ao agente
+--model NOME     escolhe o modelo sem abrir a seleção
+--host URL       endereço do servidor Ollama
+--root CAMINHO   pasta acessível ao agente
+--no-context     desliga AGENTS.md e skills do projeto
 ```
 
-No chat:
+Durante o chat, use `@` para procurar e mencionar arquivos. Use `/` para ver
+os comandos e skills disponíveis; `/clear` limpa a conversa e `/exit` encerra
+o programa.
 
-- digite `@` para buscar arquivos do projeto sem sair da linha atual;
-- continue digitando para filtrar, use as setas para escolher e `Tab` para
-  inserir o caminho;
-- caminhos com espacos sao inseridos como `@"meu arquivo.txt"`;
-- o conteudo dos arquivos mencionados e enviado ao modelo junto da mensagem;
-- digite `/` para listar e filtrar os comandos, use as setas para escolher e
-  `Tab` para completar;
-- `/clear` limpa o historico e `/exit` encerra o programa.
+## App desktop
 
-Diretorios de dependencias e artefatos (`.git`, `.dart_tool`, `build` e
-`node_modules`, entre outros) nao aparecem nas sugestoes. Um caminho ainda
-pode ser mencionado diretamente, desde que seja um arquivo UTF-8 dentro da
-raiz. Cada arquivo mencionado tem limite de 512 KiB.
+O diretório [`app/`](app/) contém a interface desktop em Flutter. Ela usa a
+mesma lógica do pacote principal e permite conectar ao Ollama, escolher um
+projeto, conversar com o agente, anexar arquivos, navegar pelos arquivos e
+acompanhar operações Git.
 
-Ao fim de cada resposta, o CLI mostra uma linha tecnica como esta:
+Para preparar o app:
 
-```text
-metricas> 34.8 tok/s | 87 tokens de saida | 512 tokens de entrada | 2.50s gerando | 2.81s total
+```sh
+cd app
+flutter pub get
 ```
 
-Os valores usam diretamente `eval_count`, `eval_duration`,
-`prompt_eval_count` e `total_duration` devolvidos pelo Ollama. Quando o agente
-faz chamadas de ferramentas, as contagens e duracoes de todas as geracoes da
-resposta sao somadas.
+## Desenvolvimento
 
-## Validar
+O pacote principal não tem dependências de runtime e fica em `lib/`. A CLI e o
+app desktop consomem esse mesmo pacote, evitando diferenças de comportamento
+entre as interfaces.
+
+Valide as alterações com:
 
 ```sh
 dart analyze
 dart test
+cd app && flutter analyze && flutter test
 ```
