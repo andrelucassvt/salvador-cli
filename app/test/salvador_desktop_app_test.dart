@@ -433,6 +433,9 @@ void main() {
   testWidgets('arvore expande, filtra e abre preview com mencao', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(1320, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
     final harness = await buildHarness(
       tester,
       initialPreferences: (root) =>
@@ -481,6 +484,7 @@ void main() {
     await tester.pumpAndSettle();
     await tapPreview(tester, find.byKey(const Key('tree-entry-src/main.dart')));
 
+    expect(find.byKey(const Key('file-preview-dialog')), findsOneWidget);
     expect(find.byKey(const Key('preview-pane')), findsOneWidget);
     expect(find.text('src/main.dart'), findsOneWidget);
     expect(find.textContaining('linhas'), findsOneWidget);
@@ -491,12 +495,10 @@ void main() {
       find.byKey(const Key('composer-field')),
     );
     expect(composer.controller!.text, '@src/main.dart ');
-
-    await tester.tap(find.byKey(const Key('close-preview-button')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('preview-pane')), findsNothing);
+    expect(find.byKey(const Key('file-preview-dialog')), findsNothing);
 
     await tapPreview(tester, find.byKey(const Key('tree-entry-imagem.bin')));
+    expect(find.byKey(const Key('file-preview-error-dialog')), findsOneWidget);
     expect(find.byKey(const Key('preview-error-pane')), findsOneWidget);
     expect(find.textContaining('binario'), findsOneWidget);
 

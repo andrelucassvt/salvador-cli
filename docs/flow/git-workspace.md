@@ -1,6 +1,6 @@
 ---
 generated_at: 2026-08-29
-source_commit: 4347c73
+source_commit: 71de3fa
 source_state: dirty
 verified_at: 2026-09-04
 status: current
@@ -15,7 +15,7 @@ related_plans: ['docs/plan/git-workspace/00-indice.md', 'docs/plan/git-tool-oper
 
 O usuário escolhe Git no rail esquerdo (`WorkspaceSection.git`). A View já vinculou a raiz ao `GitCubit`, que carrega um `GitSnapshot` via `GitClient` (`Process.run('git', ...)` com runner injetável, sem shell). O repositório só é aceito quando o top-level resolvido coincide com a raiz; pasta sem Git ou repositório acima dela viram estados apresentáveis, sem ações.
 
-No workspace o usuário navega refs, commits e arquivos. O cabeçalho traz um botão preenchido “Pedir ao Salvador”, que abre um drawer com conversa independente do chat principal, e a branch atual abre um menu das demais branches locais. Em largura compacta, o botão preserva o destaque visual e o tooltip, mas oculta seu rótulo para não causar overflow. Escolher uma branch no menu chama `GitCubit.checkoutBranch`, que só aceita ref local do snapshot atual e reaproveita a ação tipada `checkoutBranch` (`git checkout <branch>`).
+No workspace o usuário navega refs, commits e arquivos. O cabeçalho traz um botão preenchido “Pedir ao Salvador”, que abre um drawer com conversa independente do chat principal, e a branch atual abre um menu das demais branches locais. Clicar em um arquivo de alteração local mantém sua seleção no `GitCubit` e encaminha o caminho ao preview amplo compartilhado do shell, que usa a leitura confinada do workspace. Em largura compacta, o botão preserva o destaque visual e o tooltip, mas oculta seu rótulo para não causar overflow. Escolher uma branch no menu chama `GitCubit.checkoutBranch`, que só aceita ref local do snapshot atual e reaproveita a ação tipada `checkoutBranch` (`git checkout <branch>`).
 
 O envio ao Salvador serializa só a seleção atual (`serializeGitContext`) e manda a uma `AgentSession` com `GitProfile`: consultas `git_status`/`git_log`/`git_diff`/`git_show` e a ferramenta única `git`. A ferramenta executa ações locais normais no turno e registra `GitActionProposal` para ações de rede ou destrutivas. O `GitActionReviewDialog` confirma estas últimas e chama `GitCubit.executeApproved` → `GitActionExecutor` com argumentos fixos; sucesso recarrega o snapshot, falha preserva os dados e mostra banner. Fetch do cabeçalho também entra no dialog porque envolve rede.
 
@@ -33,8 +33,8 @@ O envio ao Salvador serializa só a seleção atual (`serializeGitContext`) e ma
 4. **Estados do repositório** — `git_cubit.dart` + `git_workspace.dart`
    `GitRepositoryKind.valid` → `GitLoaded` (seleções sobrevivem se a ref/commit/arquivo ainda existe). `notRepository` / `repositoryOutsideRoot` / erro → telas com “Tentar novamente”. Sem raiz → `GitEmpty`.
 
-5. **Navegação visual e troca de branch** — `git_workspace.dart` + `git_branches_panel.dart` / `git_commit_graph.dart` / `git_commit_inspector.dart` / `git_worktree_panel.dart`
-   Refs, grafo (histórico inicial limitado, `loadMore` pagina), inspector e worktree. A branch atual no cabeçalho abre somente as demais branches locais; a escolha chama `GitCubit.checkoutBranch`, que dispara a operação tipada normal e recarrega o snapshot no sucesso. Largura &lt; 900 recolhe branches e abre inspector como gaveta. Seleção (`selectRef`/`selectCommit`/`selectFile`) não dispara Git.
+5. **Navegação visual, preview e troca de branch** — `git_workspace.dart` + `git_branches_panel.dart` / `git_commit_graph.dart` / `git_commit_inspector.dart` / `git_worktree_panel.dart`
+   Refs, grafo (histórico inicial limitado, `loadMore` pagina), inspector e worktree. A branch atual no cabeçalho abre somente as demais branches locais; a escolha chama `GitCubit.checkoutBranch`, que dispara a operação tipada normal e recarrega o snapshot no sucesso. Largura &lt; 900 recolhe branches e abre inspector como gaveta. O clique do worktree chama `GitCubit.selectFile` e o callback `onOpenFile` recebido do shell; `_ShellScreenState._openFilePreview` reutiliza `FileExplorerCubit.openPreview` e abre `FilePreviewDialog` com o conteúdo atual do arquivo. A seleção não dispara Git e o preview não usa shell nem `git show`.
 
 6. **Abrir o assistente** — `git_workspace.dart` → `_GitHeader` + `git_assistant_cubit.dart` → `openDrawer`
    O botão preenchido “Pedir ao Salvador” só abre o drawer; a seleção Git permanece. Chips de branch/commit/arquivo escutam `GitCubit` e `GitAssistantCubit`.
@@ -78,12 +78,13 @@ O envio ao Salvador serializa só a seleção atual (`serializeGitContext`) e ma
 | Dados | `app/lib/data/repositories/git_assistant_repository_impl.dart` | Falhas do agente/Ollama/Git → `Result<T>` |
 | Estado | `app/lib/presentation/desktop/git/view_model/git_{cubit,state}.dart` | Snapshot, seleção, paginação, troca validada para branch local e `executeApproved` |
 | Estado | `app/lib/presentation/desktop/git/view_model/git_assistant_{cubit,state}.dart` | Drawer, mensagens, propostas, readiness |
-| Apresentação | `app/lib/presentation/desktop/git/content/git_workspace.dart` | Shell Git, seletor da branch local, Fetch, botão Pedir ao Salvador e banner de erro |
+| Apresentação | `app/lib/presentation/desktop/git/content/git_workspace.dart` | Shell Git, seletor da branch local, Fetch, botão Pedir ao Salvador, banner de erro e callback de preview do worktree |
+| Apresentação compartilhada | `app/lib/presentation/desktop/view/desktop_view.dart` + `chat/widgets/preview_pane.dart` | Lê o arquivo pelo `FileExplorerCubit` e exibe `FilePreviewDialog` ou erro sobre o workspace Git |
 | Apresentação | `app/lib/presentation/desktop/git/widgets/git_assistant_drawer.dart` | Conversa, chips, composer, propostas |
 | Apresentação | `app/lib/presentation/desktop/git/content/git_action_review_dialog.dart` | Revisão Cancelar/Confirmar |
 | Configuração | `app/lib/config/inject/app_injector.dart` | Data sources/repos singleton; Cubits factory |
 | Testes | `test/git_test.dart`, `test/salvador_cli_test.dart` | Args exatos, enum fechado, sessão sem `run_command` |
-| Testes | `app/test/presentation/git/`, `app/test/salvador_desktop_app_test.dart` | Cubits, drawer, confirmação, conversas independentes |
+| Testes | `app/test/presentation/git/`, `app/test/salvador_desktop_app_test.dart` | Cubits, drawer, confirmação, conversas independentes e encaminhamento de arquivo Git ao preview compartilhado |
 
 ## Regras de Negócio Relevantes
 
@@ -98,6 +99,7 @@ O envio ao Salvador serializa só a seleção atual (`serializeGitContext`) e ma
 - **Refresh só no sucesso** — `GitCubit.executeApproved`: falha preserva `GitLoaded.snapshot` e preenche `actionError`.
 - **Chat e Git são sessões distintas** — `ChatCubit` e `GitAssistantCubit` têm datasources/`AgentSession` próprios; alternar o rail não mistura mensagens.
 - **Edição de arquivo no Git segue `allowEdit`** — write/replace ficam disponíveis na sessão Git só se as permissões do workspace permitirem (conflitos).
+- **Conteúdo do worktree segue o leitor confinado do workspace** — `git_worktree_panel.dart` encaminha apenas o caminho; `desktop_view.dart` usa `FileExplorerCubit.openPreview`, portanto a leitura continua sob `ToolRegistry` com `AgentPermissions.readOnly` e erros aparecem no diálogo.
 
 ## Dependências Externas
 

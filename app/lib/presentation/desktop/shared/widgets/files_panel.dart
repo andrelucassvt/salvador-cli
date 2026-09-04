@@ -13,10 +13,12 @@ class FilesPanel extends StatelessWidget {
     super.key,
     required this.filterController,
     required this.onCollapse,
+    required this.onOpenFile,
   });
 
   final TextEditingController filterController;
   final VoidCallback onCollapse;
+  final Future<void> Function(String path) onOpenFile;
 
   @override
   Widget build(BuildContext context) {
@@ -125,7 +127,7 @@ class FilesPanel extends StatelessWidget {
                               entry: loaded.treeEntries[index],
                               onToggleDirectory:
                                   fileExplorerCubit.toggleDirectory,
-                              onOpenFile: fileExplorerCubit.openPreview,
+                              onOpenFile: onOpenFile,
                             ),
                           ),
                   ),

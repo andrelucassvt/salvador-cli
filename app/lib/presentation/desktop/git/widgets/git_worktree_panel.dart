@@ -9,7 +9,9 @@ import 'package:salvador_desktop/presentation/desktop/git/view_model/git_state.d
 /// Grupos vazios nao aparecem; selecao de arquivo mostra o resumo no
 /// inspector.
 class GitWorktreePanel extends StatelessWidget {
-  const GitWorktreePanel({super.key});
+  const GitWorktreePanel({super.key, this.onOpenFile});
+
+  final Future<void> Function(String path)? onOpenFile;
 
   @override
   Widget build(BuildContext context) {
@@ -123,6 +125,7 @@ class GitWorktreePanel extends StatelessWidget {
                                   entries: group.entries,
                                   selectedPath: state.selectedFilePath,
                                   onTap: cubit.selectFile,
+                                  onOpenFile: onOpenFile,
                                 ),
                               ),
                               const SizedBox(width: 10),
@@ -145,6 +148,7 @@ class _WorktreeGroup extends StatelessWidget {
     required this.entries,
     required this.selectedPath,
     required this.onTap,
+    this.onOpenFile,
   });
 
   final String keyName;
@@ -152,6 +156,7 @@ class _WorktreeGroup extends StatelessWidget {
   final List<GitWorktreeEntry> entries;
   final String? selectedPath;
   final ValueChanged<String> onTap;
+  final Future<void> Function(String path)? onOpenFile;
 
   @override
   Widget build(BuildContext context) {
@@ -185,7 +190,10 @@ class _WorktreeGroup extends StatelessWidget {
                 final selected = entry.path == selectedPath;
                 return InkWell(
                   key: Key('git-file-${entry.path}'),
-                  onTap: () => onTap(entry.path),
+                  onTap: () {
+                    onTap(entry.path);
+                    onOpenFile?.call(entry.path);
+                  },
                   child: Container(
                     color: selected ? gitSelectedColor : null,
                     padding: const EdgeInsets.symmetric(

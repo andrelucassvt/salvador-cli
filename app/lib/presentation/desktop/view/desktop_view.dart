@@ -268,6 +268,37 @@ class _ShellScreenState extends State<_ShellScreen> {
     _promptFocus.requestFocus();
   }
 
+  Future<void> _openFilePreview(String path) async {
+    await _fileExplorerCubit.openPreview(path);
+    if (!mounted) return;
+    final loaded = _fileExplorerCubit.state as FileExplorerLoaded;
+    final preview = loaded.preview;
+    if (preview != null) {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => FilePreviewDialog(
+          preview: preview,
+          onMention: () {
+            _mentionPreviewed();
+            Navigator.of(dialogContext).pop();
+          },
+          onClose: () => Navigator.of(dialogContext).pop(),
+        ),
+      );
+    } else if (loaded.previewError != null) {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => FilePreviewErrorDialog(
+          message: loaded.previewError!,
+          onClose: () => Navigator.of(dialogContext).pop(),
+        ),
+      );
+    }
+    if (mounted && !_fileExplorerCubit.isClosed) {
+      _fileExplorerCubit.closePreview();
+    }
+  }
+
   Future<void> _openSettings() async {
     final workspaceState = _workspaceCubit.state;
     if (workspaceState is! WorkspaceReady) return;
@@ -429,6 +460,7 @@ class _ShellScreenState extends State<_ShellScreen> {
                             filterController: _filterController,
                             onCollapse: () =>
                                 setState(() => _rightPanelExpanded = false),
+                            onOpenFile: _openFilePreview,
                           ),
                         )
                       else
@@ -502,26 +534,10 @@ class _ShellScreenState extends State<_ShellScreen> {
 
   Widget _buildCenter() {
     if (_section == WorkspaceSection.git) {
-      return const GitWorkspace();
+      return GitWorkspace(onOpenFile: _openFilePreview);
     }
     return BlocBuilder<FileExplorerCubit, FileExplorerState>(
-      builder: (context, fileExplorerState) {
-        final loaded = fileExplorerState as FileExplorerLoaded;
-        final preview = loaded.preview;
-        if (preview != null) {
-          return PreviewPane(
-            preview: preview,
-            onMention: _mentionPreviewed,
-            onClose: _fileExplorerCubit.closePreview,
-          );
-        }
-        final previewError = loaded.previewError;
-        if (previewError != null) {
-          return PreviewErrorPane(
-            message: previewError,
-            onClose: _fileExplorerCubit.closePreview,
-          );
-        }
+      builder: (context, _) {
         return BlocBuilder<ChatCubit, ChatState>(
           builder: (context, chatState) {
             final idle = chatState as ChatIdle;

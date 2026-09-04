@@ -96,6 +96,7 @@ void main() {
     required GitCubit target,
     FakeGitAssistantRepository? assistantRepository,
     Size size = const Size(1100, 720),
+    Future<void> Function(String path)? onOpenFile,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -116,7 +117,7 @@ void main() {
               BlocProvider<GitAssistantCubit>.value(value: assistantCubit),
               BlocProvider<WorkspaceCubit>.value(value: workspace),
             ],
-            child: const GitWorkspace(),
+            child: GitWorkspace(onOpenFile: onOpenFile),
           ),
         ),
       ),
@@ -126,6 +127,24 @@ void main() {
   }
 
   group('GitWorkspace valido', () {
+    testWidgets('arquivo do worktree abre o preview compartilhado', (
+      tester,
+    ) async {
+      final target = await loadValid();
+      String? openedPath;
+      await pumpWorkspace(
+        tester,
+        target: target,
+        onOpenFile: (path) async => openedPath = path,
+      );
+
+      await tester.tap(find.byKey(const Key('git-file-lib/a.dart')));
+      await tester.pump();
+
+      expect(openedPath, 'lib/a.dart');
+      expect((target.state as GitLoaded).selectedFilePath, 'lib/a.dart');
+    });
+
     testWidgets('mostra resumo, grupos de refs, grafo e alteracoes', (
       tester,
     ) async {

@@ -17,7 +17,9 @@ import 'package:salvador_desktop/presentation/desktop/git/widgets/git_worktree_p
 /// commits, inspector e alteracoes locais. Em larguras compactas, branches
 /// viram painel recolhivel e o inspector abre como drawer inferior.
 class GitWorkspace extends StatefulWidget {
-  const GitWorkspace({super.key});
+  const GitWorkspace({super.key, this.onOpenFile});
+
+  final Future<void> Function(String path)? onOpenFile;
 
   @override
   State<GitWorkspace> createState() => _GitWorkspaceState();
@@ -49,6 +51,7 @@ class _GitWorkspaceState extends State<GitWorkspace> {
                 setState(() => _branchesVisible = !_branchesVisible),
             onToggleInspector: () =>
                 setState(() => _inspectorVisible = !_inspectorVisible),
+            onOpenFile: widget.onOpenFile,
           ),
           GitLoaded() => _LoadedWorkspace(
             state: state,
@@ -60,6 +63,7 @@ class _GitWorkspaceState extends State<GitWorkspace> {
                 setState(() => _branchesVisible = !_branchesVisible),
             onToggleInspector: () =>
                 setState(() => _inspectorVisible = !_inspectorVisible),
+            onOpenFile: widget.onOpenFile,
           ),
           GitNotRepository() => _GitHint(
             icon: Icons.folder_off_outlined,
@@ -118,6 +122,7 @@ class _LoadedWorkspace extends StatelessWidget {
     required this.inspectorVisible,
     required this.onToggleBranches,
     required this.onToggleInspector,
+    this.onOpenFile,
   });
 
   final GitLoaded state;
@@ -127,6 +132,7 @@ class _LoadedWorkspace extends StatelessWidget {
   final bool inspectorVisible;
   final VoidCallback onToggleBranches;
   final VoidCallback onToggleInspector;
+  final Future<void> Function(String path)? onOpenFile;
 
   @override
   Widget build(BuildContext context) {
@@ -151,6 +157,7 @@ class _LoadedWorkspace extends StatelessWidget {
                       inspectorVisible: inspectorVisible,
                       onToggleBranches: onToggleBranches,
                       onToggleInspector: onToggleInspector,
+                      onOpenFile: onOpenFile,
                     )
                   : Column(
                       children: [
@@ -164,7 +171,7 @@ class _LoadedWorkspace extends StatelessWidget {
                             ],
                           ),
                         ),
-                        const GitWorktreePanel(),
+                        GitWorktreePanel(onOpenFile: onOpenFile),
                       ],
                     ),
             ),
@@ -182,6 +189,7 @@ class _CompactLayout extends StatelessWidget {
     required this.inspectorVisible,
     required this.onToggleBranches,
     required this.onToggleInspector,
+    this.onOpenFile,
   });
 
   final GitLoaded state;
@@ -189,6 +197,7 @@ class _CompactLayout extends StatelessWidget {
   final bool inspectorVisible;
   final VoidCallback onToggleBranches;
   final VoidCallback onToggleInspector;
+  final Future<void> Function(String path)? onOpenFile;
 
   @override
   Widget build(BuildContext context) {
@@ -244,7 +253,7 @@ class _CompactLayout extends StatelessWidget {
             ),
           )
         else
-          const GitWorktreePanel(),
+          GitWorktreePanel(onOpenFile: onOpenFile),
       ],
     );
   }

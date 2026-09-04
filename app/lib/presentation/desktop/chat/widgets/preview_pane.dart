@@ -176,6 +176,7 @@ class PreviewErrorPane extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       key: const Key('preview-error-pane'),
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
@@ -220,4 +221,58 @@ class PreviewErrorPane extends StatelessWidget {
       ],
     );
   }
+}
+
+class FilePreviewDialog extends StatelessWidget {
+  const FilePreviewDialog({
+    super.key,
+    required this.preview,
+    required this.onMention,
+    required this.onClose,
+  });
+
+  final FilePreviewEntity preview;
+  final VoidCallback onMention;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) => Dialog(
+    key: const Key('file-preview-dialog'),
+    insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
+    clipBehavior: Clip.antiAlias,
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 1180, maxHeight: 780),
+      child: SizedBox(
+        width: MediaQuery.sizeOf(context).width * .9,
+        height: MediaQuery.sizeOf(context).height * .86,
+        child: PreviewPane(
+          preview: preview,
+          onMention: onMention,
+          onClose: onClose,
+        ),
+      ),
+    ),
+  );
+}
+
+class FilePreviewErrorDialog extends StatelessWidget {
+  const FilePreviewErrorDialog({
+    super.key,
+    required this.message,
+    required this.onClose,
+  });
+
+  final String message;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) => Dialog(
+    key: const Key('file-preview-error-dialog'),
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 720),
+      child: IntrinsicHeight(
+        child: PreviewErrorPane(message: message, onClose: onClose),
+      ),
+    ),
+  );
 }
