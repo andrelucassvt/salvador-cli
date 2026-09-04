@@ -296,7 +296,129 @@ class _GitHeader extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 760;
+          final narrow = constraints.maxWidth < 400;
           final showMetrics = constraints.maxWidth >= 840;
+          final branchSelector = switchableBranches.isEmpty
+              ? _BranchName(branch: branch)
+              : PopupMenuButton<GitRef>(
+                  key: const Key('git-branch-selector'),
+                  tooltip: 'Trocar branch',
+                  padding: EdgeInsets.zero,
+                  onSelected: (ref) =>
+                      context.read<GitCubit>().checkoutBranch(ref.shortName),
+                  itemBuilder: (context) => [
+                    for (final ref in switchableBranches)
+                      PopupMenuItem(
+                        key: Key('git-checkout-${ref.name}'),
+                        value: ref,
+                        child: Text(
+                          ref.shortName,
+                          style: const TextStyle(fontFamily: 'JetBrains Mono'),
+                        ),
+                      ),
+                  ],
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(child: _BranchName(branch: branch)),
+                      const Icon(Icons.arrow_drop_down_rounded, color: muted),
+                    ],
+                  ),
+                );
+          final actions = [
+            Tooltip(
+              message: 'Buscar alterações remotas',
+              child: compact
+                  ? IconButton(
+                      key: const Key('git-fetch-button'),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: executing
+                          ? null
+                          : () => _requestFetch(context),
+                      icon: executing
+                          ? const SizedBox.square(
+                              dimension: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.cloud_download_outlined, size: 18),
+                    )
+                  : OutlinedButton.icon(
+                      key: const Key('git-fetch-button'),
+                      onPressed: executing
+                          ? null
+                          : () => _requestFetch(context),
+                      icon: executing
+                          ? const SizedBox.square(
+                              dimension: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.cloud_download_outlined, size: 16),
+                      label: const Text('Fetch'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 9,
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 10),
+            Tooltip(
+              message: 'Pedir ao Salvador',
+              child: FilledButton.icon(
+                key: const Key('git-ask-assistant-button'),
+                onPressed: () => context.read<GitAssistantCubit>().openDrawer(),
+                icon: const Icon(Icons.auto_awesome_outlined, size: 16),
+                label: compact
+                    ? const SizedBox.shrink()
+                    : const Text('Pedir ao Salvador'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: ocean,
+                  foregroundColor: paper,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 10,
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            IconButton(
+              key: const Key('git-refresh-button'),
+              tooltip: 'Atualizar',
+              visualDensity: VisualDensity.compact,
+              onPressed: onRefresh,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+            ),
+          ];
+
+          if (narrow) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(children: [Expanded(child: branchSelector)]),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: actions,
+                  ),
+                ),
+              ],
+            );
+          }
+
           return Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -329,41 +451,7 @@ class _GitHeader extends StatelessWidget {
                         ),
                       ),
                     if (!compact) const SizedBox(width: 12),
-                    Flexible(
-                      child: switchableBranches.isEmpty
-                          ? _BranchName(branch: branch)
-                          : PopupMenuButton<GitRef>(
-                              key: const Key('git-branch-selector'),
-                              tooltip: 'Trocar branch',
-                              padding: EdgeInsets.zero,
-                              onSelected: (ref) => context
-                                  .read<GitCubit>()
-                                  .checkoutBranch(ref.shortName),
-                              itemBuilder: (context) => [
-                                for (final ref in switchableBranches)
-                                  PopupMenuItem(
-                                    key: Key('git-checkout-${ref.name}'),
-                                    value: ref,
-                                    child: Text(
-                                      ref.shortName,
-                                      style: const TextStyle(
-                                        fontFamily: 'JetBrains Mono',
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Flexible(child: _BranchName(branch: branch)),
-                                  const Icon(
-                                    Icons.arrow_drop_down_rounded,
-                                    color: muted,
-                                  ),
-                                ],
-                              ),
-                            ),
-                    ),
+                    Flexible(child: branchSelector),
                     if (showMetrics) ...[
                       const SizedBox(width: 10),
                       FittedBox(
@@ -441,89 +529,8 @@ class _GitHeader extends StatelessWidget {
                 ),
               ),
 
-              const Spacer(),
-              Tooltip(
-                message: 'Buscar alterações remotas',
-                child: compact
-                    ? IconButton(
-                        key: const Key('git-fetch-button'),
-                        visualDensity: VisualDensity.compact,
-                        onPressed: executing
-                            ? null
-                            : () => _requestFetch(context),
-                        icon: executing
-                            ? const SizedBox.square(
-                                dimension: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(
-                                Icons.cloud_download_outlined,
-                                size: 18,
-                              ),
-                      )
-                    : OutlinedButton.icon(
-                        key: const Key('git-fetch-button'),
-                        onPressed: executing
-                            ? null
-                            : () => _requestFetch(context),
-                        icon: executing
-                            ? const SizedBox.square(
-                                dimension: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(
-                                Icons.cloud_download_outlined,
-                                size: 16,
-                              ),
-                        label: const Text('Fetch'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 9,
-                          ),
-                          textStyle: const TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-              ),
               const SizedBox(width: 4),
-              Tooltip(
-                message: 'Pedir ao Salvador',
-                child: FilledButton.icon(
-                  key: const Key('git-ask-assistant-button'),
-                  onPressed: () =>
-                      context.read<GitAssistantCubit>().openDrawer(),
-                  icon: const Icon(Icons.auto_awesome_outlined, size: 16),
-                  label: compact
-                      ? const SizedBox.shrink()
-                      : const Text('Pedir ao Salvador'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: ocean,
-                    foregroundColor: paper,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 10,
-                    ),
-                    textStyle: const TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-              IconButton(
-                key: const Key('git-refresh-button'),
-                tooltip: 'Atualizar',
-                visualDensity: VisualDensity.compact,
-                onPressed: onRefresh,
-                icon: const Icon(Icons.refresh_rounded, size: 18),
-              ),
+              ...actions,
             ],
           );
         },

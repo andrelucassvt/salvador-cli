@@ -382,11 +382,11 @@ void main() {
       },
     );
 
-    testWidgets('cabecalho compacto preserva as acoes sem overflow', (
+    testWidgets('cabecalho estreito preserva as acoes sem overflow', (
       tester,
     ) async {
       final target = await loadValid();
-      await pumpWorkspace(tester, target: target, size: const Size(500, 700));
+      await pumpWorkspace(tester, target: target, size: const Size(320, 700));
 
       expect(find.byKey(const Key('git-branch-selector')), findsOneWidget);
       expect(find.byKey(const Key('git-ask-assistant-button')), findsOneWidget);
