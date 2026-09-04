@@ -41,11 +41,11 @@ void main() {
     files: [GitCommitFile(status: 'M', path: 'lib/main.dart')],
   );
 
-  GitSnapshot validSnapshot() => GitSnapshot(
-    repository: const GitRepositoryState(
+  GitSnapshot validSnapshot({String branch = 'main'}) => GitSnapshot(
+    repository: GitRepositoryState(
       kind: GitRepositoryKind.valid,
       topLevel: '/repo/raiz',
-      branch: 'main',
+      branch: branch,
       headOid: headHash,
     ),
     upstream: 'origin/main',
@@ -248,6 +248,37 @@ void main() {
       // contadores de grupos.
       expect(find.text('3'), findsOneWidget);
     });
+
+    testWidgets('seletor troca apenas para uma branch local', (tester) async {
+      final target = await loadValid();
+      await pumpWorkspace(tester, target: target);
+
+      await tester.tap(find.byKey(const Key('git-branch-selector')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('git-checkout-refs/heads/feature')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('git-checkout-refs/remotes/origin/main')),
+        findsNothing,
+      );
+
+      fakeRepository.nextResult = Result.ok(validSnapshot(branch: 'feature'));
+      await tester.tap(
+        find.byKey(const Key('git-checkout-refs/heads/feature')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        fakeRepository.executedActions.single,
+        const GitActionProposal(
+          type: GitActionType.checkoutBranch,
+          refName: 'feature',
+        ),
+      );
+      expect((target.state as GitLoaded).snapshot.repository.branch, 'feature');
+    });
   });
 
   group('GitWorkspace estados', () {
@@ -329,6 +360,17 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+
+    testWidgets('cabecalho compacto preserva as acoes sem overflow', (
+      tester,
+    ) async {
+      final target = await loadValid();
+      await pumpWorkspace(tester, target: target, size: const Size(500, 700));
+
+      expect(find.byKey(const Key('git-branch-selector')), findsOneWidget);
+      expect(find.byKey(const Key('git-ask-assistant-button')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
   });
 
   group('GitWorkspace assistente', () {
@@ -339,6 +381,10 @@ void main() {
       await pumpWorkspace(tester, target: target);
 
       expect(find.byKey(const Key('git-assistant-drawer')), findsNothing);
+      expect(
+        find.widgetWithText(FilledButton, 'Pedir ao Salvador'),
+        findsOneWidget,
+      );
 
       await tester.tap(find.byKey(const Key('git-ask-assistant-button')));
       await tester.pumpAndSettle();

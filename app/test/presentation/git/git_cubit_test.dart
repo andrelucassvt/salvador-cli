@@ -31,6 +31,16 @@ void main() {
           headOid: '6b8dc2efa9f5ff3a00f6262229969f841cefa6fc',
         ),
         ahead: ahead,
+        localBranches: const [
+          GitRef(
+            name: 'refs/heads/main',
+            hash: '6b8dc2efa9f5ff3a00f6262229969f841cefa6fc',
+          ),
+          GitRef(
+            name: 'refs/heads/feature',
+            hash: '6b8dc2efa9f5ff3a00f6262229969f841cefa6fc',
+          ),
+        ],
         commits: [
           GitCommit(
             hash: '6b8dc2efa9f5ff3a00f6262229969f841cefa6fc',
@@ -333,6 +343,39 @@ void main() {
         await cubit.close();
       },
     );
+  });
+
+  group('GitCubit.checkoutBranch', () {
+    test('troca uma branch local e recarrega o snapshot', () async {
+      fakeRepository.nextResult = Result.ok(validSnapshot());
+      final cubit = GitCubit(fakeRepository);
+      await cubit.setRoot(root);
+
+      fakeRepository.nextResult = Result.ok(validSnapshot(branch: 'feature'));
+      final changed = await cubit.checkoutBranch('feature');
+
+      expect(changed, isTrue);
+      expect(fakeRepository.executedActions, const [
+        GitActionProposal(
+          type: GitActionType.checkoutBranch,
+          refName: 'feature',
+        ),
+      ]);
+      expect((cubit.state as GitLoaded).snapshot.repository.branch, 'feature');
+      await cubit.close();
+    });
+
+    test('recusa branch remota, inexistente ou ja atual', () async {
+      fakeRepository.nextResult = Result.ok(validSnapshot());
+      final cubit = GitCubit(fakeRepository);
+      await cubit.setRoot(root);
+
+      expect(await cubit.checkoutBranch('origin/main'), isFalse);
+      expect(await cubit.checkoutBranch('nao-existe'), isFalse);
+      expect(await cubit.checkoutBranch('main'), isFalse);
+      expect(fakeRepository.executedActions, isEmpty);
+      await cubit.close();
+    });
   });
 
   group('GitCubit paginacao', () {

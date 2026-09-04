@@ -93,6 +93,20 @@ class GitCubit extends Cubit<GitState> {
     emit(current.copyWith(selectedFilePath: path));
   }
 
+  /// Troca apenas para uma branch local presente no snapshot atual. A execucao
+  /// continua centralizada em [executeApproved], com refresh apos sucesso.
+  Future<bool> checkoutBranch(String branch) {
+    final current = state;
+    if (current is! GitLoaded ||
+        current.snapshot.repository.branch == branch ||
+        !current.snapshot.localBranches.any((ref) => ref.shortName == branch)) {
+      return Future.value(false);
+    }
+    return executeApproved(
+      GitActionProposal(type: GitActionType.checkoutBranch, refName: branch),
+    );
+  }
+
   /// Descarta o erro da ultima acao aprovada.
   void clearActionError() {
     final current = state;
