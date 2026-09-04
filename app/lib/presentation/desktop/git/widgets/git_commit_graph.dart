@@ -22,99 +22,106 @@ class GitCommitGraph extends StatelessWidget {
         final commits = state.visibleCommits;
         final layout = GitGraphLayout.calculate(commits);
         final footerCount = (state.loadingMore || state.hasMoreCommits) ? 1 : 0;
-        return ListView.builder(
-          key: const Key('git-commit-graph'),
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          itemCount: commits.length + footerCount,
-          itemBuilder: (context, index) {
-            if (index == commits.length) {
-              return _GraphFooter(
-                loading: state.loadingMore,
-                onLoadMore: cubit.loadMore,
-              );
-            }
-            final commit = commits[index];
-            final refs = _refsFor(state.snapshot, commit.hash);
-            return RepaintBoundary(
-              child: InkWell(
-                key: Key('git-commit-row-${commit.shortHash}'),
-                onTap: () => cubit.selectCommit(commit.hash),
-                child: Semantics(
-                  selected: state.selectedCommitHash == commit.hash,
-                  button: true,
-                  label: '${commit.subject}, ${commit.shortHash}',
-                  child: Container(
-                    height: gitRowHeight,
-                    color: state.selectedCommitHash == commit.hash
-                        ? gitSelectedColor
-                        : null,
-                    child: Row(
-                      children: [
-                        CustomPaint(
-                          size: Size(
-                            layout.laneCount * gitLaneWidth,
-                            gitRowHeight,
-                          ),
-                          painter: GitGraphPainter(
-                            layout: layout,
-                            row: index,
-                            laneWidth: gitLaneWidth,
-                            rowHeight: gitRowHeight,
-                            nodeRadius: 4.5,
-                            laneColor: gitLaneColor,
-                            mergeColor: gitMergeColor,
-                            nodeColor: gitNodeColor,
-                            headColor: gitHeadColor,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          commit.shortHash,
-                          style: const TextStyle(
-                            color: muted,
-                            fontSize: 10.5,
-                            fontFamily: 'JetBrains Mono',
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            commit.subject,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: ink,
-                              fontSize: 12.5,
-                              fontWeight:
-                                  state.selectedCommitHash == commit.hash
-                                  ? FontWeight.w700
-                                  : FontWeight.w400,
-                            ),
-                          ),
-                        ),
-                        if (refs.isNotEmpty) ...[
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              refs,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: ocean,
-                                fontSize: 9.5,
-                                fontFamily: 'JetBrains Mono',
+        return Column(
+          children: [
+            const _HistoryToolbar(),
+            Expanded(
+              child: ListView.builder(
+                key: const Key('git-commit-graph'),
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                itemCount: commits.length + footerCount,
+                itemBuilder: (context, index) {
+                  if (index == commits.length) {
+                    return _GraphFooter(
+                      loading: state.loadingMore,
+                      onLoadMore: cubit.loadMore,
+                    );
+                  }
+                  final commit = commits[index];
+                  final refs = _refsFor(state.snapshot, commit.hash);
+                  return RepaintBoundary(
+                    child: InkWell(
+                      key: Key('git-commit-row-${commit.shortHash}'),
+                      onTap: () => cubit.selectCommit(commit.hash),
+                      child: Semantics(
+                        selected: state.selectedCommitHash == commit.hash,
+                        button: true,
+                        label: '${commit.subject}, ${commit.shortHash}',
+                        child: Container(
+                          height: gitRowHeight,
+                          color: state.selectedCommitHash == commit.hash
+                              ? gitSelectedColor
+                              : null,
+                          child: Row(
+                            children: [
+                              CustomPaint(
+                                size: Size(
+                                  layout.laneCount * gitLaneWidth,
+                                  gitRowHeight,
+                                ),
+                                painter: GitGraphPainter(
+                                  layout: layout,
+                                  row: index,
+                                  laneWidth: gitLaneWidth,
+                                  rowHeight: gitRowHeight,
+                                  nodeRadius: 4.5,
+                                  laneColor: gitLaneColor,
+                                  mergeColor: gitMergeColor,
+                                  nodeColor: gitNodeColor,
+                                  headColor: gitHeadColor,
+                                ),
                               ),
-                            ),
+                              const SizedBox(width: 6),
+                              Text(
+                                commit.shortHash,
+                                style: const TextStyle(
+                                  color: muted,
+                                  fontSize: 10.5,
+                                  fontFamily: 'JetBrains Mono',
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  commit.subject,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: ink,
+                                    fontSize: 12.5,
+                                    fontWeight:
+                                        state.selectedCommitHash == commit.hash
+                                        ? FontWeight.w700
+                                        : FontWeight.w400,
+                                  ),
+                                ),
+                              ),
+                              if (refs.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    refs,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: ocean,
+                                      fontSize: 9.5,
+                                      fontFamily: 'JetBrains Mono',
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(width: 12),
+                            ],
                           ),
-                        ],
-                        const SizedBox(width: 12),
-                      ],
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
-            );
-          },
+            ),
+          ],
         );
       },
     );
@@ -130,6 +137,39 @@ class GitCommitGraph extends StatelessWidget {
         if (ref.hash == hash) ref.shortName,
     ];
     return names.join(' · ');
+  }
+}
+
+class _HistoryToolbar extends StatelessWidget {
+  const _HistoryToolbar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('git-history-toolbar'),
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: const BoxDecoration(
+        color: gitToolbarSurface,
+        border: Border(bottom: BorderSide(color: line)),
+      ),
+      child: const Row(
+        children: [
+          Text(
+            'Histórico',
+            style: TextStyle(
+              color: ink,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          SizedBox(width: 10),
+          Icon(Icons.account_tree_outlined, size: 14, color: ocean),
+          SizedBox(width: 4),
+          Text('Grafo', style: TextStyle(color: ocean, fontSize: 10.5)),
+        ],
+      ),
+    );
   }
 }
 

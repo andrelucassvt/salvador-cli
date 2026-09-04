@@ -22,9 +22,9 @@ class GitWorktreePanel extends StatelessWidget {
         final entries = state.visibleWorktree;
         return Container(
           key: const Key('git-worktree-panel'),
-          height: 176,
+          height: 188,
           decoration: const BoxDecoration(
-            color: paper,
+            color: gitToolbarSurface,
             border: Border(top: BorderSide(color: line)),
           ),
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
@@ -34,12 +34,11 @@ class GitWorktreePanel extends StatelessWidget {
               Row(
                 children: [
                   const Text(
-                    'ALTERAÇÕES LOCAIS',
+                    'Mesa de trabalho',
                     style: TextStyle(
-                      color: muted,
-                      fontSize: 9.5,
+                      color: ink,
+                      fontSize: 11.5,
                       fontWeight: FontWeight.w700,
-                      letterSpacing: 1.1,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -164,7 +163,7 @@ class _WorktreeGroup extends StatelessWidget {
       key: Key('git-worktree-group-$keyName'),
       decoration: BoxDecoration(
         border: Border.all(color: line),
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

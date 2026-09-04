@@ -31,14 +31,13 @@ class GitCommitInspector extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Padding(
-                padding: EdgeInsets.fromLTRB(14, 12, 14, 8),
+                padding: EdgeInsets.fromLTRB(14, 13, 14, 10),
                 child: Text(
-                  'DETALHES',
+                  'Detalhes',
                   style: TextStyle(
-                    color: muted,
-                    fontSize: 9.5,
+                    color: ink,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: 1.1,
                   ),
                 ),
               ),

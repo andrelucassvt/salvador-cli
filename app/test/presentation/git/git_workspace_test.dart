@@ -171,6 +171,7 @@ void main() {
       expect(find.byKey(const Key('git-stash-0')), findsOneWidget);
 
       expect(find.byKey(const Key('git-commit-graph')), findsOneWidget);
+      expect(find.byKey(const Key('git-history-toolbar')), findsOneWidget);
       expect(find.byKey(const Key('git-commit-row-a000000')), findsOneWidget);
 
       expect(find.byKey(const Key('git-commit-inspector')), findsOneWidget);
@@ -181,6 +182,7 @@ void main() {
       );
 
       expect(find.byKey(const Key('git-worktree-panel')), findsOneWidget);
+      expect(find.text('Mesa de trabalho'), findsOneWidget);
       expect(
         find.byKey(const Key('git-worktree-group-staged')),
         findsOneWidget,
@@ -388,6 +390,15 @@ void main() {
 
       expect(find.byKey(const Key('git-branch-selector')), findsOneWidget);
       expect(find.byKey(const Key('git-ask-assistant-button')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('cabecalho amplo exibe status e Fetch textual', (tester) async {
+      final target = await loadValid();
+      await pumpWorkspace(tester, target: target, size: const Size(1100, 720));
+
+      expect(find.byKey(const Key('git-status-chip')), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Fetch'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });

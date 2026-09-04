@@ -88,7 +88,7 @@ class _GitWorkspaceState extends State<GitWorkspace> {
         };
         return Container(
           key: const Key('git-workspace'),
-          color: shell,
+          color: gitWorkspaceSurface,
           constraints: const BoxConstraints.expand(),
           child: Stack(
             children: [
@@ -138,7 +138,7 @@ class _LoadedWorkspace extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 900;
+        final compact = constraints.maxWidth < 840;
         return Column(
           children: [
             if (refreshing) const LinearProgressIndicator(minHeight: 2),
@@ -288,163 +288,211 @@ class _GitHeader extends StatelessWidget {
         .where((ref) => ref.shortName != repository.branch)
         .toList(growable: false);
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 16, 10),
+      padding: const EdgeInsets.fromLTRB(20, 10, 16, 10),
       decoration: const BoxDecoration(
-        color: paper,
+        color: gitToolbarSurface,
         border: Border(bottom: BorderSide(color: line)),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final compact = constraints.maxWidth < 600;
+          final compact = constraints.maxWidth < 760;
           final showMetrics = constraints.maxWidth >= 840;
           return Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              if (!compact)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: snapshot.clean
-                        ? const Color(0xFFE2F5EC)
-                        : const Color(0xFFFFEFE9),
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                  child: Text(
-                    snapshot.clean ? 'limpo' : 'sujo',
-                    style: TextStyle(
-                      color: snapshot.clean ? const Color(0xFF2E7D57) : coral,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: .5,
-                    ),
-                  ),
-                ),
-              if (!compact) const SizedBox(width: 12),
-              Flexible(
-                child: switchableBranches.isEmpty
-                    ? _BranchName(branch: branch)
-                    : PopupMenuButton<GitRef>(
-                        key: const Key('git-branch-selector'),
-                        tooltip: 'Trocar branch',
-                        padding: EdgeInsets.zero,
-                        onSelected: (ref) => context
-                            .read<GitCubit>()
-                            .checkoutBranch(ref.shortName),
-                        itemBuilder: (context) => [
-                          for (final ref in switchableBranches)
-                            PopupMenuItem(
-                              key: Key('git-checkout-${ref.name}'),
-                              value: ref,
-                              child: Text(
-                                ref.shortName,
-                                style: const TextStyle(
-                                  fontFamily: 'JetBrains Mono',
-                                ),
+              Expanded(
+                child: Row(
+                  children: [
+                    if (!compact)
+                      Container(
+                        key: const Key('git-status-chip'),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: snapshot.clean
+                              ? gitSubtleSurface
+                              : const Color(0xFFFFEFE9),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: Text(
+                          snapshot.clean ? 'limpo' : 'sujo',
+                          style: TextStyle(
+                            color: snapshot.clean
+                                ? const Color(0xFF2E7D57)
+                                : coral,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: .5,
+                          ),
+                        ),
+                      ),
+                    if (!compact) const SizedBox(width: 12),
+                    Flexible(
+                      child: switchableBranches.isEmpty
+                          ? _BranchName(branch: branch)
+                          : PopupMenuButton<GitRef>(
+                              key: const Key('git-branch-selector'),
+                              tooltip: 'Trocar branch',
+                              padding: EdgeInsets.zero,
+                              onSelected: (ref) => context
+                                  .read<GitCubit>()
+                                  .checkoutBranch(ref.shortName),
+                              itemBuilder: (context) => [
+                                for (final ref in switchableBranches)
+                                  PopupMenuItem(
+                                    key: Key('git-checkout-${ref.name}'),
+                                    value: ref,
+                                    child: Text(
+                                      ref.shortName,
+                                      style: const TextStyle(
+                                        fontFamily: 'JetBrains Mono',
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(child: _BranchName(branch: branch)),
+                                  const Icon(
+                                    Icons.arrow_drop_down_rounded,
+                                    color: muted,
+                                  ),
+                                ],
                               ),
                             ),
-                        ],
+                    ),
+                    if (showMetrics) ...[
+                      const SizedBox(width: 10),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Flexible(child: _BranchName(branch: branch)),
-                            const Icon(
-                              Icons.arrow_drop_down_rounded,
-                              color: muted,
+                            Text(
+                              'HEAD ${_short(repository.headOid)}',
+                              style: const TextStyle(
+                                color: muted,
+                                fontSize: 10.5,
+                                fontFamily: 'JetBrains Mono',
+                              ),
+                            ),
+                            if (snapshot.upstream != null) ...[
+                              const SizedBox(width: 10),
+                              const Icon(
+                                Icons.call_split_rounded,
+                                size: 12,
+                                color: muted,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                snapshot.upstream!,
+                                style: const TextStyle(
+                                  color: muted,
+                                  fontSize: 10.5,
+                                  fontFamily: 'JetBrains Mono',
+                                ),
+                              ),
+                            ],
+                            const SizedBox(width: 10),
+                            Text(
+                              'ahead',
+                              style: const TextStyle(
+                                color: Color(0xFF2E7D57),
+                                fontSize: 10.5,
+                                fontFamily: 'JetBrains Mono',
+                              ),
+                            ),
+                            Text(
+                              '${snapshot.ahead}',
+                              style: const TextStyle(
+                                color: Color(0xFF2E7D57),
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                fontFamily: 'JetBrains Mono',
+                              ),
+                            ),
+                            const SizedBox(width: 7),
+                            Text(
+                              'behind',
+                              style: const TextStyle(
+                                color: Color(0xFFB3492E),
+                                fontSize: 10.5,
+                                fontFamily: 'JetBrains Mono',
+                              ),
+                            ),
+                            Text(
+                              '${snapshot.behind}',
+                              style: const TextStyle(
+                                color: Color(0xFFB3492E),
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                fontFamily: 'JetBrains Mono',
+                              ),
                             ),
                           ],
                         ),
                       ),
-              ),
-              if (showMetrics) ...[
-                const SizedBox(width: 10),
-                Flexible(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'HEAD ${_short(repository.headOid)}',
-                          style: const TextStyle(
-                            color: muted,
-                            fontSize: 10.5,
-                            fontFamily: 'JetBrains Mono',
-                          ),
-                        ),
-                        if (snapshot.upstream != null) ...[
-                          const SizedBox(width: 10),
-                          const Icon(
-                            Icons.call_split_rounded,
-                            size: 12,
-                            color: muted,
-                          ),
-                          const SizedBox(width: 3),
-                          Text(
-                            snapshot.upstream!,
-                            style: const TextStyle(
-                              color: muted,
-                              fontSize: 10.5,
-                              fontFamily: 'JetBrains Mono',
-                            ),
-                          ),
-                        ],
-                        const SizedBox(width: 10),
-                        Text(
-                          'ahead',
-                          style: const TextStyle(
-                            color: Color(0xFF2E7D57),
-                            fontSize: 10.5,
-                            fontFamily: 'JetBrains Mono',
-                          ),
-                        ),
-                        Text(
-                          '${snapshot.ahead}',
-                          style: const TextStyle(
-                            color: Color(0xFF2E7D57),
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            fontFamily: 'JetBrains Mono',
-                          ),
-                        ),
-                        const SizedBox(width: 7),
-                        Text(
-                          'behind',
-                          style: const TextStyle(
-                            color: Color(0xFFB3492E),
-                            fontSize: 10.5,
-                            fontFamily: 'JetBrains Mono',
-                          ),
-                        ),
-                        Text(
-                          '${snapshot.behind}',
-                          style: const TextStyle(
-                            color: Color(0xFFB3492E),
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            fontFamily: 'JetBrains Mono',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                    ],
+                  ],
                 ),
-              ],
-              const Spacer(),
-              IconButton(
-                key: const Key('git-fetch-button'),
-                tooltip: 'Fetch',
-                visualDensity: VisualDensity.compact,
-                onPressed: executing ? null : () => _requestFetch(context),
-                icon: executing
-                    ? const SizedBox.square(
-                        dimension: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.cloud_download_outlined, size: 18),
               ),
+
+              const Spacer(),
+              Tooltip(
+                message: 'Buscar alterações remotas',
+                child: compact
+                    ? IconButton(
+                        key: const Key('git-fetch-button'),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: executing
+                            ? null
+                            : () => _requestFetch(context),
+                        icon: executing
+                            ? const SizedBox.square(
+                                dimension: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.cloud_download_outlined,
+                                size: 18,
+                              ),
+                      )
+                    : OutlinedButton.icon(
+                        key: const Key('git-fetch-button'),
+                        onPressed: executing
+                            ? null
+                            : () => _requestFetch(context),
+                        icon: executing
+                            ? const SizedBox.square(
+                                dimension: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.cloud_download_outlined,
+                                size: 16,
+                              ),
+                        label: const Text('Fetch'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 9,
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 4),
               Tooltip(
                 message: 'Pedir ao Salvador',
                 child: FilledButton.icon(
