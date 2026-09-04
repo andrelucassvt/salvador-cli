@@ -1,8 +1,8 @@
 ---
 generated_at: 2026-08-29
-source_commit: f8fcea4
+source_commit: 5b51277
 source_state: dirty
-verified_at: 2026-08-29
+verified_at: 2026-09-04
 status: current
 related_plans: ['docs/plan/git-workspace/00-indice.md', 'docs/plan/git-tool-operations/00-indice.md']
 ---
@@ -19,13 +19,13 @@ No workspace o usuário navega refs, commits e arquivos. “Pedir ao Salvador”
 
 ## Passo a Passo
 
-1. **Navegação Chat/Git** — `app/lib/presentation/desktop/widgets/workspace_rail.dart` → `WorkspaceRail`
+1. **Navegação Chat/Git** — `app/lib/presentation/desktop/shared/widgets/workspace_rail.dart` → `WorkspaceRail`
    O rail permanente troca `_ShellScreenState._section` entre `WorkspaceSection.chat` e `.git`. A área central (`desktop_view.dart` → `_buildCenter`) monta `GitWorkspace` sem destruir o `ChatCubit`.
 
 2. **Montagem e sincronização** — `app/lib/presentation/desktop/view/desktop_view.dart` → `_ShellScreenState.initState` / `MultiBlocListener`
    Resolve `GitCubit` e `GitAssistantCubit` no `AppInjector`. Mudança de raiz chama `GitCubit.setRoot`. Mudança de host/modelo/raiz/permissões chama `GitAssistantCubit.attachSession` (sessão própria, conversa zerada). `modelState`/`connecting` atualizam `GitAssistantCubit.updateReadiness` em paralelo ao chat.
 
-3. **Descoberta e snapshot** — `app/lib/presentation/desktop/view_model/git_cubit.dart` → `GitCubit.setRoot`
+3. **Descoberta e snapshot** — `app/lib/presentation/desktop/git/view_model/git_cubit.dart` → `GitCubit.setRoot`
    Emite `GitLoading` (preserva `GitLoaded` anterior). `GitRepository.loadSnapshot` → `GitDataSource` → `GitClient.loadSnapshot`. `GitClient.discover` compara `rev-parse --show-toplevel` com a raiz resolvida.
 
 4. **Estados do repositório** — `git_cubit.dart` + `git_workspace.dart`
@@ -74,14 +74,14 @@ No workspace o usuário navega refs, commits e arquivos. “Pedir ao Salvador”
 | Dados | `app/lib/data/datasources/git_assistant_datasource.dart` | `AgentSession` própria, `allowCommands: false`, contexto concatenado |
 | Dados | `app/lib/data/repositories/git_repository_impl.dart` | `GitException`/`ProcessException` → `GitFailureException` |
 | Dados | `app/lib/data/repositories/git_assistant_repository_impl.dart` | Falhas do agente/Ollama/Git → `Result<T>` |
-| Estado | `app/lib/presentation/desktop/view_model/git_{cubit,state}.dart` | Snapshot, seleção, paginação, `executeApproved` |
-| Estado | `app/lib/presentation/desktop/view_model/git_assistant_{cubit,state}.dart` | Drawer, mensagens, propostas, readiness |
-| Apresentação | `app/lib/presentation/desktop/content/git_workspace.dart` | Shell Git, Fetch, Pedir ao Salvador, banner de erro |
-| Apresentação | `app/lib/presentation/desktop/widgets/git_assistant_drawer.dart` | Conversa, chips, composer, propostas |
-| Apresentação | `app/lib/presentation/desktop/content/git_action_review_dialog.dart` | Revisão Cancelar/Confirmar |
+| Estado | `app/lib/presentation/desktop/git/view_model/git_{cubit,state}.dart` | Snapshot, seleção, paginação, `executeApproved` |
+| Estado | `app/lib/presentation/desktop/git/view_model/git_assistant_{cubit,state}.dart` | Drawer, mensagens, propostas, readiness |
+| Apresentação | `app/lib/presentation/desktop/git/content/git_workspace.dart` | Shell Git, Fetch, Pedir ao Salvador, banner de erro |
+| Apresentação | `app/lib/presentation/desktop/git/widgets/git_assistant_drawer.dart` | Conversa, chips, composer, propostas |
+| Apresentação | `app/lib/presentation/desktop/git/content/git_action_review_dialog.dart` | Revisão Cancelar/Confirmar |
 | Configuração | `app/lib/config/inject/app_injector.dart` | Data sources/repos singleton; Cubits factory |
 | Testes | `test/git_test.dart`, `test/salvador_cli_test.dart` | Args exatos, enum fechado, sessão sem `run_command` |
-| Testes | `app/test/presentation/desktop/git_*_test.dart`, `app/test/salvador_desktop_app_test.dart` | Cubits, drawer, confirmação, conversas independentes |
+| Testes | `app/test/presentation/git/`, `app/test/salvador_desktop_app_test.dart` | Cubits, drawer, confirmação, conversas independentes |
 
 ## Regras de Negócio Relevantes
 
@@ -106,4 +106,4 @@ No workspace o usuário navega refs, commits e arquivos. “Pedir ao Salvador”
 - **`GitDataSource.executeAction` instancia um `GitActionExecutor()` novo**, sem reutilizar o `GitClient` injetado no datasource; testes de execução precisam fakear o repositório/executor, não só o runner do client de snapshot.
 - **Timeouts divergem:** `GitClient` usa 15 s nas leituras; `GitActionExecutor` usa 30 s nas mutações.
 - **Merge/rebase que deixam conflitos não disparam abort/reset.** O snapshot (possivelmente sujo) é recarregado só se a ação retornar sucesso; falha mostra o stderr e mantém o estado anterior em memória.
-- **`GitActionReviewDialog` vive em `content/`**, embora o plano listasse `widgets/`; o drawer e o Fetch do header reutilizam o mesmo dialog.
+- **`GitActionReviewDialog` vive em `git/content/`**, embora o plano listasse `widgets/`; o drawer e o Fetch do header reutilizam o mesmo dialog.

@@ -18,20 +18,20 @@ import 'package:salvador_desktop/data/repositories/workspace_repository_impl.dar
 import 'package:salvador_desktop/domain/entities/desktop_preferences_entity.dart';
 import 'package:salvador_desktop/domain/entities/persisted_session_summary_entity.dart';
 import 'package:salvador_desktop/domain/interfaces/ollama_repository.dart';
-import 'package:salvador_desktop/presentation/desktop/view_model/chat_cubit.dart';
-import 'package:salvador_desktop/presentation/desktop/view_model/chat_state.dart';
-import 'package:salvador_desktop/presentation/desktop/view_model/file_explorer_cubit.dart';
-import 'package:salvador_desktop/presentation/desktop/view_model/git_assistant_cubit.dart';
-import 'package:salvador_desktop/presentation/desktop/view_model/git_assistant_state.dart';
-import 'package:salvador_desktop/presentation/desktop/view_model/git_cubit.dart';
-import 'package:salvador_desktop/presentation/desktop/view_model/settings_cubit.dart';
-import 'package:salvador_desktop/presentation/desktop/view_model/settings_state.dart';
-import 'package:salvador_desktop/presentation/desktop/view_model/workspace_cubit.dart';
-import 'package:salvador_desktop/presentation/desktop/view_model/workspace_state.dart';
+import 'package:salvador_desktop/presentation/desktop/chat/view_model/chat_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/chat/view_model/chat_state.dart';
+import 'package:salvador_desktop/presentation/desktop/git/view_model/git_assistant_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/git/view_model/git_assistant_state.dart';
+import 'package:salvador_desktop/presentation/desktop/git/view_model/git_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/shared/view_model/file_explorer_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/shared/view_model/settings_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/shared/view_model/settings_state.dart';
+import 'package:salvador_desktop/presentation/desktop/shared/view_model/workspace_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/shared/view_model/workspace_state.dart';
 import 'package:salvador_desktop/presentation/desktop/view/desktop_view.dart';
 
-import 'presentation/desktop/fakes/fake_git_assistant_repository.dart';
-import 'presentation/desktop/fakes/fake_git_repository.dart';
+import 'presentation/git/fakes/fake_git_assistant_repository.dart';
+import 'presentation/git/fakes/fake_git_repository.dart';
 
 /// Suíte de integração: registra Cubits reais no AppInjector, faking só a
 /// borda de rede (OllamaClient) e a borda de disco (DesktopStorageService),

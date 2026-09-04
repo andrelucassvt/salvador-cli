@@ -18,13 +18,13 @@ import 'package:salvador_desktop/domain/interfaces/git_assistant_repository.dart
 import 'package:salvador_desktop/domain/interfaces/git_repository.dart';
 import 'package:salvador_desktop/domain/interfaces/ollama_repository.dart';
 import 'package:salvador_desktop/domain/interfaces/workspace_repository.dart';
-import 'package:salvador_desktop/presentation/desktop/view_model/chat_cubit.dart';
-import 'package:salvador_desktop/presentation/desktop/view_model/file_explorer_cubit.dart';
-import 'package:salvador_desktop/presentation/desktop/view_model/git_assistant_cubit.dart';
-import 'package:salvador_desktop/presentation/desktop/view_model/git_cubit.dart';
-import 'package:salvador_desktop/presentation/desktop/view_model/settings_cubit.dart';
-import 'package:salvador_desktop/presentation/desktop/view_model/settings_state.dart';
-import 'package:salvador_desktop/presentation/desktop/view_model/workspace_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/chat/view_model/chat_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/git/view_model/git_assistant_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/git/view_model/git_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/shared/view_model/file_explorer_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/shared/view_model/settings_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/shared/view_model/settings_state.dart';
+import 'package:salvador_desktop/presentation/desktop/shared/view_model/workspace_cubit.dart';
 
 /// Service locator unico do app. Populado incrementalmente pelas partes
 /// seguintes da migracao (services -> datasources -> repositories -> cubits).

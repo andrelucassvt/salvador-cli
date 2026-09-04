@@ -1,0 +1,585 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:salvador_cli/salvador_cli.dart';
+import 'package:salvador_desktop/domain/entities/chat_message_entity.dart';
+import 'package:salvador_desktop/presentation/desktop/git/content/git_action_review_dialog.dart';
+import 'package:salvador_desktop/presentation/desktop/theme/desktop_theme.dart';
+import 'package:salvador_desktop/presentation/desktop/chat/view_model/chat_cubit.dart';
+import 'package:salvador_desktop/presentation/desktop/chat/view_model/chat_state.dart';
+import 'package:salvador_desktop/presentation/desktop/chat/widgets/file_chip.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+class EmptyState extends StatelessWidget {
+  const EmptyState({
+    super.key,
+    required this.ready,
+    required this.rootPath,
+    required this.onPrompt,
+  });
+
+  final bool ready;
+  final String? rootPath;
+  final ValueChanged<String> onPrompt;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(36),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 66,
+                height: 66,
+                decoration: BoxDecoration(
+                  color: navy,
+                  borderRadius: BorderRadius.circular(21),
+                ),
+                child: const Icon(
+                  Icons.terminal_rounded,
+                  color: Colors.white,
+                  size: 30,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                ready
+                    ? 'Pronto para trabalhar localmente.'
+                    : 'Prepare sua bancada local.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: ink,
+                  fontSize: 28,
+                  height: 1.15,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -.6,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                ready
+                    ? (rootPath != null
+                          ? 'O agente pode ler, editar e executar comandos somente em $rootPath.'
+                          : 'Nenhum projeto vinculado — o agente responde sem acesso a arquivos ou comandos.')
+                    : 'Confirme o servidor e o modelo para começar.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: muted, fontSize: 14, height: 1.5),
+              ),
+              if (ready) ...[
+                const SizedBox(height: 30),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    _PromptCard(
+                      label: 'Entender o projeto',
+                      prompt:
+                          'Analise este projeto e explique sua arquitetura.',
+                      icon: Icons.account_tree_outlined,
+                      onTap: onPrompt,
+                    ),
+                    _PromptCard(
+                      label: 'Revisar um arquivo',
+                      prompt: 'Revise @',
+                      icon: Icons.fact_check_outlined,
+                      onTap: onPrompt,
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class MessageCard extends StatelessWidget {
+  const MessageCard({super.key, required this.entry});
+
+  final ChatMessageEntity entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final user = entry.role == ChatRole.user;
+    return Align(
+      alignment: user ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        constraints: BoxConstraints(maxWidth: user ? 700 : 880),
+        margin: const EdgeInsets.only(bottom: 18),
+        padding: const EdgeInsets.all(17),
+        decoration: BoxDecoration(
+          color: user ? navy : paper,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(15),
+            topRight: const Radius.circular(15),
+            bottomLeft: Radius.circular(user ? 15 : 4),
+            bottomRight: Radius.circular(user ? 4 : 15),
+          ),
+          border: user ? null : Border.all(color: line),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  user ? 'VOCÊ' : 'SALVADOR',
+                  style: TextStyle(
+                    color: user ? Colors.white60 : ocean,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.25,
+                  ),
+                ),
+                const Spacer(),
+                _CopyButton(text: entry.content, onDark: user),
+              ],
+            ),
+            const SizedBox(height: 8),
+            user
+                ? Text(
+                    entry.content,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      height: 1.52,
+                    ),
+                  )
+                : _MarkdownContent(content: entry.content),
+            if (entry.mentionedFiles.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: entry.mentionedFiles
+                    .map((path) => FileChip(label: path))
+                    .toList(growable: false),
+              ),
+            ],
+            if (entry.attachedFiles.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: entry.attachedFiles
+                    .map((name) => FileChip(label: name, showAtPrefix: false))
+                    .toList(growable: false),
+              ),
+            ],
+            if (entry.warnings.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              ...entry.warnings.map(
+                (warning) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    'Aviso: $warning',
+                    style: const TextStyle(color: coral, fontSize: 11),
+                  ),
+                ),
+              ),
+            ],
+            if (entry.metrics != null) ...[
+              const SizedBox(height: 14),
+              _MetricsBar(metrics: entry.metrics!),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MarkdownContent extends StatelessWidget {
+  const _MarkdownContent({required this.content});
+
+  final String content;
+
+  @override
+  Widget build(BuildContext context) {
+    final baseText = const TextStyle(color: ink, fontSize: 14, height: 1.52);
+    final codeText = const TextStyle(
+      color: ink,
+      fontSize: 13,
+      height: 1.45,
+      fontFamily: 'JetBrains Mono',
+    );
+    return MarkdownBody(
+      data: content,
+      onTapLink: (text, href, title) {
+        if (href == null) return;
+        final uri = Uri.tryParse(href);
+        if (uri != null) launchUrl(uri);
+      },
+      styleSheet: MarkdownStyleSheet(
+        p: baseText,
+        listBullet: baseText,
+        blockquote: baseText.copyWith(
+          color: muted,
+          fontStyle: FontStyle.italic,
+        ),
+        blockquoteDecoration: const BoxDecoration(
+          border: Border(left: BorderSide(color: line, width: 3)),
+        ),
+        blockquotePadding: const EdgeInsets.only(left: 12),
+        h1: baseText.copyWith(
+          fontSize: 22,
+          fontWeight: FontWeight.w800,
+          color: navy,
+        ),
+        h2: baseText.copyWith(
+          fontSize: 19,
+          fontWeight: FontWeight.w800,
+          color: navy,
+        ),
+        h3: baseText.copyWith(
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+          color: navy,
+        ),
+        h4: baseText.copyWith(
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+          color: navy,
+        ),
+        strong: baseText.copyWith(fontWeight: FontWeight.w700),
+        em: baseText.copyWith(fontStyle: FontStyle.italic),
+        a: baseText.copyWith(
+          color: ocean,
+          decoration: TextDecoration.underline,
+        ),
+        code: codeText.copyWith(backgroundColor: shell),
+        codeblockDecoration: BoxDecoration(
+          color: shell,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: line),
+        ),
+        codeblockPadding: const EdgeInsets.all(12),
+        horizontalRuleDecoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: line)),
+        ),
+        tableBorder: TableBorder.all(color: line),
+        tableCellsPadding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 6,
+        ),
+        tableHead: baseText.copyWith(fontWeight: FontWeight.w700),
+        tableBody: baseText,
+      ),
+    );
+  }
+}
+
+class _CopyButton extends StatefulWidget {
+  const _CopyButton({required this.text, required this.onDark});
+
+  final String text;
+  final bool onDark;
+
+  @override
+  State<_CopyButton> createState() => _CopyButtonState();
+}
+
+class _CopyButtonState extends State<_CopyButton> {
+  bool _copied = false;
+
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.text));
+    if (!mounted) return;
+    setState(() => _copied = true);
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.onDark ? Colors.white60 : muted;
+    return Tooltip(
+      message: _copied ? 'Copiado!' : 'Copiar mensagem',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: _copy,
+        child: Padding(
+          padding: const EdgeInsets.all(3),
+          child: Icon(
+            _copied ? Icons.check_rounded : Icons.copy_rounded,
+            size: 14,
+            color: _copied ? (widget.onDark ? Colors.white : ocean) : color,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MetricsBar extends StatelessWidget {
+  const _MetricsBar({required this.metrics});
+
+  final InferenceMetrics metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    final rate = metrics.tokensPerSecond;
+    final items = [
+      (
+        Icons.speed_rounded,
+        rate == null ? 'n/d' : '${rate.toStringAsFixed(1)} tok/s',
+      ),
+      (Icons.north_east_rounded, '${metrics.generatedTokens} saída'),
+      (Icons.south_west_rounded, '${metrics.promptTokens} entrada'),
+      (
+        Icons.timer_outlined,
+        '${metrics.totalSeconds.toStringAsFixed(2)}s total',
+      ),
+      if (metrics.generations > 1)
+        (Icons.repeat_rounded, '${metrics.generations} gerações'),
+    ];
+    return Container(
+      padding: const EdgeInsets.only(top: 12),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: line)),
+      ),
+      child: Wrap(
+        spacing: 14,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: items
+            .map(
+              (item) => Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(item.$1, size: 12, color: ocean),
+                  const SizedBox(width: 4),
+                  Text(
+                    item.$2,
+                    style: const TextStyle(
+                      color: muted,
+                      fontSize: 10.5,
+                      fontFamily: 'JetBrains Mono',
+                      letterSpacing: .1,
+                    ),
+                  ),
+                ],
+              ),
+            )
+            .toList(growable: false),
+      ),
+    );
+  }
+}
+
+class ThinkingCard extends StatelessWidget {
+  const ThinkingCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: 20),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox.square(
+              dimension: 16,
+              child: CircularProgressIndicator(strokeWidth: 2, color: ocean),
+            ),
+            SizedBox(width: 10),
+            Text('O agente está trabalhando…', style: TextStyle(color: muted)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ErrorBanner extends StatelessWidget {
+  const ErrorBanner({super.key, required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+      color: const Color(0xFFFFE9E5),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline_rounded, color: coral, size: 18),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: ink, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Propostas Git arriscadas emitidas pelo agente no chat principal. A acao
+/// permanece pendente ate o usuario revisar e confirmar ou cancelar.
+class ChatPendingProposals extends StatelessWidget {
+  const ChatPendingProposals({super.key});
+
+  Future<void> _review(BuildContext context, GitActionProposal proposal) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => GitActionReviewDialog(proposal: proposal),
+    );
+    if (confirmed != true || !context.mounted) return;
+    await context.read<ChatCubit>().executeProposal(proposal);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<ChatCubit, ChatState>(
+      builder: (context, state) {
+        final proposals = (state as ChatIdle).pendingProposals;
+        if (proposals.isEmpty) return const SizedBox.shrink();
+        return Container(
+          key: const Key('chat-pending-proposals'),
+          width: double.infinity,
+          margin: const EdgeInsets.fromLTRB(28, 20, 28, 0),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFEFE9),
+            border: Border.all(color: const Color(0xFFF2C8BA)),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'PROPOSTAS GIT PENDENTES',
+                style: TextStyle(
+                  color: coral,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.1,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (var index = 0; index < proposals.length; index++)
+                    _ChatGitProposalChip(
+                      key: Key('chat-git-proposal-$index'),
+                      proposal: proposals[index],
+                      onReview: () => _review(context, proposals[index]),
+                      onCancel: () => context.read<ChatCubit>().dismissProposal(
+                        proposals[index],
+                      ),
+                      index: index,
+                    ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ChatGitProposalChip extends StatelessWidget {
+  const _ChatGitProposalChip({
+    super.key,
+    required this.proposal,
+    required this.onReview,
+    required this.onCancel,
+    required this.index,
+  });
+
+  final GitActionProposal proposal;
+  final VoidCallback onReview;
+  final VoidCallback onCancel;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 460),
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: paper,
+        border: Border.all(color: line),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: Text(
+                proposal.summary,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: ink,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          TextButton(
+            key: Key('chat-review-proposal-$index'),
+            onPressed: onReview,
+            child: const Text('Revisar'),
+          ),
+          TextButton(
+            key: Key('chat-cancel-proposal-$index'),
+            onPressed: onCancel,
+            child: const Text('Cancelar'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PromptCard extends StatelessWidget {
+  const _PromptCard({
+    required this.label,
+    required this.prompt,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final String prompt;
+  final IconData icon;
+  final ValueChanged<String> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: () => onTap(prompt),
+      icon: Icon(icon, size: 18),
+      label: Text(label),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: navy,
+        backgroundColor: paper,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        side: const BorderSide(color: line),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+}
