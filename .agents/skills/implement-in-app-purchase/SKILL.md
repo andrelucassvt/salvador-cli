@@ -11,10 +11,12 @@ Implementa o fluxo completo de In-App Purchase seguindo a arquitetura do projeto
 
 - **Passo 1 obrigatório**: faça todas as perguntas em uma única mensagem e aguarde as respostas antes de gerar qualquer código.
 - **Regra de ouro**: comprar é assíncrono — `buy()` apenas dispara a compra; o resultado SEMPRE chega pelo `purchaseStream` e é processado em um único lugar: `_processPurchaseUpdates` no Cubit.
+- **Loading nunca é infinito**: `PurchaseLoading` existe SÓ para o carregamento inicial de produtos. Durante compra/restauração o paywall continua visível (`PurchaseLoaded.purchaseInProgress`), todo caminho do stream termina em um estado final, e um watchdog destrava a UI se a loja nunca responder (restore sem compras, Ask to Buy, evento perdido).
+- **Pós-sucesso é decisão do usuário**: a pergunta 5 do Passo 1 define o que acontece após `PurchaseSuccess` (fechar o paywall, navegar ou permanecer) — implemente exatamente isso no `listener` da View.
 - **Único ponto que muda entre os modos**: a implementação de `_verifyAndComplete()`. Sem back-end ela verifica localmente e salva no `StorageService`; com back-end ela chama `POST /purchases/verify`. Service, Cubit, State e View são idênticos no resto.
-- **`completePurchase()` só após verificação bem-sucedida** — nunca antes.
+- **`completePurchase()` só após verificação bem-sucedida** — exceto transações canceladas/com erro que estejam `pendingCompletePurchase` (precisam ser completadas para a loja parar de reentregá-las).
 - **Verificação por tipo**: compras únicas (consumível E não-consumível) usam `verifyPurchase`; SOMENTE assinatura usa `verifySubscription`.
-- **Cubit**: cancele a subscription do stream no `close()` — nunca deixe o stream vazar.
+- **Cubit**: cancele a subscription e o watchdog no `close()`, e proteja todo `emit` após `await` com `isClosed` — nunca deixe o stream vazar nem emita em Cubit fechado.
 - **Apple Guideline 3.1.2(c)**: paywall com assinatura DEVE exibir links de Termos de Uso (EULA) e Política de Privacidade, e um botão "Restaurar compras".
 - **Segurança**: nunca desbloqueie conteúdo premium confiando apenas no client-side.
 
@@ -39,11 +41,18 @@ Antes de gerar qualquer código, faça TODAS as perguntas abaixo de uma vez — 
 
 4. Qual é o nome da feature/tela? Ex: "purchase", "paywall", "premium"
 
-5. Se houver assinatura: quais as URLs de Termos de Uso e Política de Privacidade?
+5. O que deve acontecer logo após uma compra/assinatura concluída com sucesso?
+   - Fechar o paywall e voltar para a tela anterior (pop)
+   - Navegar para uma rota específica → qual?
+   - Permanecer no paywall exibindo o estado premium desbloqueado
+   - Outro → descreva
+   (a resposta vira o `listener` de PurchaseSuccess na View — não invente um comportamento)
+
+6. Se houver assinatura: quais as URLs de Termos de Uso e Política de Privacidade?
    (obrigatórias no paywall — Apple Guideline 3.1.2(c); use placeholder se ainda não existirem)
 ```
 
-Guarde as respostas — elas definem os Sets de IDs, o modo de verificação e o nome dos arquivos.
+Guarde as respostas — elas definem os Sets de IDs, o modo de verificação, o nome dos arquivos e o comportamento pós-compra.
 
 ---
 
@@ -83,6 +92,19 @@ View ──ação──▶ Cubit ──buy()──▶ InAppPurchaseService ─�
 | Assinatura | `buyNonConsumable` | `getSubscriptionToken` | `verifySubscription` |
 
 > `buyNonConsumable` também é o método correto para assinaturas — é assim que o plugin `in_app_purchase` funciona. O que diferencia assinatura é a verificação, nunca a compra.
+
+### Por que a UI nunca pode travar (e como o template garante isso)
+
+Loading infinito em IAP nasce de caminhos onde nenhum evento final chega ao stream. Os quatro casos reais e como o template cobre cada um:
+
+| Caminho sem evento final | Cobertura no template |
+|---|---|
+| Restore sem nenhuma compra na conta | iOS emite lista vazia (tratada); Android pode não emitir nada → watchdog de 30s destrava |
+| `pending` que nunca resolve (Ask to Buy / aprovação parental) | `pending` renova o watchdog em vez de esperar para sempre; a compra é liberada depois pelo stream |
+| Erro no próprio `purchaseStream` | `onError` na subscription destrava a UI com mensagem |
+| Evento perdido / loja sem resposta | Watchdog destrava com aviso; se a compra concluir depois, o stream ainda entrega |
+
+Além disso, compra/restauração NUNCA substituem o paywall por um spinner de tela cheia: o estado vira `PurchaseLoaded(purchaseInProgress: true)` — produtos visíveis, botões desabilitados, overlay de progresso. Mesmo no pior caso, o usuário continua vendo a tela e o watchdog devolve o controle.
 
 ---
 
@@ -219,13 +241,30 @@ final class PurchaseInitial extends PurchaseState {
   const PurchaseInitial();
 }
 
+/// SOMENTE para o carregamento inicial de produtos.
+/// Compra/restauração NUNCA emitem este estado — usam
+/// PurchaseLoaded(purchaseInProgress: true) para manter o paywall visível.
 final class PurchaseLoading extends PurchaseState {
   const PurchaseLoading();
 }
 
 final class PurchaseLoaded extends PurchaseState {
-  const PurchaseLoaded(this.products);
+  const PurchaseLoaded(
+    this.products, {
+    this.purchaseInProgress = false,
+    this.message,
+  });
+
   final List<ProductDetails> products; // produtos E assinaturas juntos
+
+  /// true enquanto uma compra/restauração está em andamento:
+  /// desabilite os botões e mostre um overlay de progresso.
+  final bool purchaseInProgress;
+
+  /// Aviso one-shot para a View exibir em SnackBar (erro recuperável,
+  /// "nada a restaurar", timeout da loja). Não é um estado de erro:
+  /// os produtos continuam na tela e o usuário pode tentar de novo.
+  final String? message;
 }
 
 final class PurchaseSuccess extends PurchaseState {
@@ -233,6 +272,9 @@ final class PurchaseSuccess extends PurchaseState {
   final String productId;
 }
 
+/// SOMENTE para falha ao carregar produtos (loja indisponível, sem rede).
+/// A View mostra a mensagem com um botão "Tentar novamente" → loadProducts().
+/// Falhas durante a compra voltam para PurchaseLoaded com message.
 final class PurchaseError extends PurchaseState {
   const PurchaseError(this.message);
   final String message;
@@ -248,59 +290,140 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 
 class PurchaseCubit extends Cubit<PurchaseState> {
   PurchaseCubit(this._service) : super(const PurchaseInitial()) {
-    _subscription = _service.purchaseStream.listen(_processPurchaseUpdates);
+    _subscription = _service.purchaseStream.listen(
+      _processPurchaseUpdates,
+      // Sem onError, um erro do stream mata a subscription em silêncio e a
+      // tela fica esperando um evento que nunca chega.
+      onError: (Object error) =>
+          _unlock(message: 'Erro na comunicação com a loja: $error'),
+    );
   }
+
+  // Tempo máximo que a UI fica bloqueada esperando a loja. A compra renova o
+  // watchdog a cada evento `pending`; o restore é curto porque "nada a
+  // restaurar" pode não gerar evento nenhum no Android.
+  static const _buyTimeout = Duration(minutes: 2);
+  static const _restoreTimeout = Duration(seconds: 30);
 
   final InAppPurchaseService _service;
   StreamSubscription<List<PurchaseDetails>>? _subscription;
+  Timer? _watchdog;
   List<ProductDetails> _products = const [];
+  bool _restoring = false;
 
   Future<void> loadProducts() async {
     emit(const PurchaseLoading());
     try {
       _products = await _service.loadProducts();
+      if (isClosed) return;
       emit(PurchaseLoaded(_products));
     } catch (e) {
+      if (isClosed) return;
       emit(PurchaseError('Erro ao carregar produtos: $e'));
     }
   }
 
   Future<void> buy(ProductDetails product) async {
-    emit(const PurchaseLoading());
+    _lock(timeout: _buyTimeout);
     try {
       await _service.buy(product);
       // NÃO emita PurchaseSuccess aqui — o resultado chega pelo stream.
     } catch (e) {
-      emit(PurchaseError('Erro ao iniciar compra: $e'));
+      _unlock(message: 'Erro ao iniciar compra: $e');
     }
   }
 
   Future<void> restore() async {
-    emit(const PurchaseLoading());
-    await _service.restorePurchases();
-    // O resultado chega pelo stream com PurchaseStatus.restored.
+    _restoring = true;
+    _lock(timeout: _restoreTimeout);
+    try {
+      await _service.restorePurchases();
+      // O resultado chega pelo stream com PurchaseStatus.restored. Sem nada a
+      // restaurar, o iOS emite lista vazia e o Android pode não emitir nada —
+      // nesse caso o watchdog destrava a tela.
+    } catch (e) {
+      _restoring = false;
+      _unlock(message: 'Erro ao restaurar compras: $e');
+    }
   }
 
   Future<void> _processPurchaseUpdates(List<PurchaseDetails> purchases) async {
+    if (purchases.isEmpty) {
+      // iOS emite lista vazia quando o restore termina sem compras.
+      if (_restoring) {
+        _restoring = false;
+        _unlock(message: 'Nenhuma compra para restaurar');
+      }
+      return;
+    }
     for (final purchase in purchases) {
       switch (purchase.status) {
         case PurchaseStatus.pending:
-          continue; // loja ainda processando — mantenha o Loading atual
+          // Loja processando OU aguardando aprovação (Ask to Buy), que pode
+          // levar dias. Renova o watchdog em vez de esperar para sempre; se o
+          // status final não chegar, a tela destrava sozinha e a compra é
+          // liberada depois pelo stream (inclusive em outra sessão).
+          _lock(timeout: _buyTimeout);
         case PurchaseStatus.canceled:
           if (purchase.pendingCompletePurchase) {
             await _service.completePurchase(purchase);
           }
-          emit(PurchaseLoaded(_products)); // desistir não é erro — volte ao paywall
+          _unlock(); // desistir não é erro — paywall volta ao normal
         case PurchaseStatus.error:
-          emit(PurchaseError(purchase.error?.message ?? 'Erro na compra'));
+          if (purchase.pendingCompletePurchase) {
+            // Sem completar, o iOS reentrega a transação com erro a cada
+            // inicialização do app.
+            await _service.completePurchase(purchase);
+          }
+          _unlock(message: purchase.error?.message ?? 'Erro na compra');
         case PurchaseStatus.purchased:
         case PurchaseStatus.restored:
           final isValid = await _verifyAndComplete(purchase);
-          isValid
-              ? emit(PurchaseSuccess(purchase.productID))
-              : emit(const PurchaseError('A compra não pôde ser verificada'));
+          if (isClosed) return;
+          if (isValid) {
+            _watchdog?.cancel();
+            _restoring = false;
+            emit(PurchaseSuccess(purchase.productID));
+          } else {
+            _unlock(message: 'A compra não pôde ser verificada');
+          }
       }
     }
+  }
+
+  /// Bloqueia as ações do paywall SEM esconder os produtos e arma o watchdog —
+  /// a garantia de que nenhum caminho deixa a tela travada para sempre.
+  void _lock({required Duration timeout}) {
+    _watchdog?.cancel();
+    _watchdog = Timer(timeout, () {
+      final wasRestoring = _restoring;
+      _restoring = false;
+      _unlock(
+        message: wasRestoring
+            ? 'Nenhuma compra encontrada para restaurar'
+            : 'A loja demorou para responder. Se a compra foi concluída, '
+                'ela será liberada automaticamente.',
+      );
+    });
+    _emitLoaded(purchaseInProgress: true);
+  }
+
+  /// Libera as ações do paywall; [message] vira SnackBar na View (one-shot).
+  void _unlock({String? message}) {
+    _watchdog?.cancel();
+    _emitLoaded(message: message);
+  }
+
+  void _emitLoaded({bool purchaseInProgress = false, String? message}) {
+    if (isClosed) return;
+    // Evento do stream antes de loadProducts terminar (ex.: transação pendente
+    // entregue na inicialização): não sobrescreva o Loading inicial.
+    if (_products.isEmpty && state is! PurchaseLoaded) return;
+    emit(PurchaseLoaded(
+      _products,
+      purchaseInProgress: purchaseInProgress,
+      message: message,
+    ));
   }
 
   // ÚNICO ponto que muda entre os modos — escolha UMA das duas versões:
@@ -324,6 +447,7 @@ class PurchaseCubit extends Cubit<PurchaseState> {
 
   @override
   Future<void> close() async {
+    _watchdog?.cancel();
     await _subscription?.cancel();
     return super.close();
   }
@@ -332,13 +456,59 @@ class PurchaseCubit extends Cubit<PurchaseState> {
 
 > No modo 🅱, não use callback `async` dentro de `result.when` — extraia o valor primeiro (como acima) para garantir que o `completePurchase` seja aguardado.
 
-### View (paywall) — requisitos
+### View (paywall)
 
-- `SafeArea` no conteúdo principal; `BlocBuilder` tratando TODOS os estados do sealed class
+Requisitos:
+
+- `SafeArea` no conteúdo principal; `BlocConsumer` tratando TODOS os estados do sealed class
 - `_cubit.loadProducts()` no `initState()`; `_cubit.close()` no `dispose()`
-- Textos via `context.l10n.<chave>` — zero strings hardcoded; adicione as chaves nos ARB (`app_en.arb` e `app_pt.arb`)
+- Side effects (navegação pós-sucesso, SnackBar de `message`) SEMPRE no `listener` — nunca no `builder`
+- Textos fixos da View via `context.l10n.<chave>` — zero strings hardcoded; adicione as chaves nos ARB (`app_en.arb` e `app_pt.arb`). As mensagens dinâmicas vindas do Cubit podem ser exibidas como chegam.
 - Botão **"Restaurar compras"** chamando `_cubit.restore()` (obrigatório para não-consumíveis e assinaturas — a Apple rejeita paywall sem restauração)
-- Se houver assinatura, links de **Termos de Uso** e **Política de Privacidade** (Apple Guideline 3.1.2(c)):
+
+Esqueleto do `BlocConsumer` — o `listener` de `PurchaseSuccess` implementa EXATAMENTE o comportamento respondido na pergunta 5 do Passo 1:
+
+```dart
+BlocConsumer<PurchaseCubit, PurchaseState>(
+  bloc: _cubit,
+  listener: (context, state) {
+    if (state is PurchaseSuccess) {
+      // Comportamento pós-sucesso definido no Passo 1 — exemplos:
+      // context.pop(true);           // fechar o paywall e devolver resultado
+      // context.go(AppRoutes.home);  // OU navegar para a rota escolhida
+      // OU permanecer na tela: nenhuma navegação; o builder mostra o
+      //    estado premium desbloqueado.
+    } else if (state is PurchaseLoaded && state.message != null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(state.message!)));
+    }
+  },
+  builder: (context, state) => switch (state) {
+    PurchaseInitial() || PurchaseLoading() =>
+      const Center(child: CircularProgressIndicator()),
+    PurchaseError(:final message) => _PurchaseErrorView(
+        message: message,
+        onRetry: _cubit.loadProducts, // único loading "de tela cheia" tem saída
+      ),
+    PurchaseLoaded(:final products, :final purchaseInProgress) => Stack(
+        children: [
+          _PaywallContent(products: products, enabled: !purchaseInProgress),
+          if (purchaseInProgress)
+            const ColoredBox(
+              color: Colors.black38,
+              child: Center(child: CircularProgressIndicator()),
+            ),
+        ],
+      ),
+    // Se o pós-sucesso for "permanecer na tela", renderize aqui o estado
+    // premium desbloqueado; nos outros casos o listener já navegou.
+    PurchaseSuccess() => const Center(child: CircularProgressIndicator()),
+  },
+)
+```
+
+Se houver assinatura, links de **Termos de Uso** e **Política de Privacidade** (Apple Guideline 3.1.2(c)):
 
 ```dart
 import 'package:url_launcher/url_launcher.dart';
@@ -420,6 +590,7 @@ Os templates acima já garantem o fluxo; confira apenas o que depende do context
 
 - [ ] Sets de IDs preenchidos com os IDs REAIS informados no Passo 1
 - [ ] `_verifyAndComplete` implementado na versão do modo escolhido (🅰 ou 🅱) — nunca as duas
+- [ ] `listener` de `PurchaseSuccess` implementando o comportamento pós-compra respondido na pergunta 5 do Passo 1
 - [ ] Rota adicionada em `app_routes.dart` e `app_router.dart`
 - [ ] Chaves de l10n criadas nos ARB (incluindo `premiumTermsOfUse` e `premiumPrivacyPolicy` se houver assinatura)
 - [ ] 🅰: placeholders de credenciais substituídos (`bundleId`, `issuerId`, `keyId`, `privateKey`, `serviceAccountJson`)
@@ -428,8 +599,10 @@ Os templates acima já garantem o fluxo; confira apenas o que depende do context
 Ao concluir, informe ao usuário o que ele deve testar manualmente:
 
 - Compra de cada tipo de produto com conta sandbox (Sandbox Tester na App Store / testador de licença no Google Play)
-- Cancelar a compra no diálogo da loja → tela volta ao paywall sem erro
-- "Restaurar compras" após reinstalar o app
+- Após a compra concluída, o comportamento pós-sucesso escolhido acontece (pop, navegação ou permanência na tela)
+- Cancelar a compra no diálogo da loja → paywall volta ao normal, sem erro e sem loading preso
+- "Restaurar compras" com compras na conta (após reinstalar) E sem nenhuma compra → no segundo caso, aviso "nada a restaurar" e tela destravada
+- Iniciar uma compra e abandonar o diálogo da loja → a tela se destrava sozinha após o timeout
 - Links de Termos e Privacidade abrindo no navegador externo
 
 ---
@@ -445,8 +618,14 @@ Ao concluir, informe ao usuário o que ele deve testar manualmente:
 ## Anti-patterns
 
 - ❌ Emitir `PurchaseSuccess` direto no `buy()` — o resultado vem pelo stream
-- ❌ Chamar `completePurchase()` antes da verificação
-- ❌ Ignorar `PurchaseStatus.canceled` — a tela fica em Loading para sempre
+- ❌ Emitir `PurchaseLoading` em `buy()`/`restore()` — spinner de tela cheia esconde o paywall; use `PurchaseLoaded(purchaseInProgress: true)`
+- ❌ Bloquear a UI sem watchdog — `pending` pode ser Ask to Buy e nunca resolver nesta sessão; restore pode não emitir nada
+- ❌ Ouvir o `purchaseStream` sem `onError` — um erro do stream trava a tela em silêncio
+- ❌ Chamar `completePurchase()` antes da verificação (exceto canceled/error com `pendingCompletePurchase`)
+- ❌ Ignorar `PurchaseStatus.canceled` — a tela fica bloqueada para sempre
+- ❌ Emitir estado depois de `await` sem checar `isClosed`
+- ❌ Navegar ou exibir SnackBar no `builder` — side effects pertencem ao `listener`
+- ❌ Inventar o comportamento pós-`PurchaseSuccess` — ele é definido pela resposta da pergunta 5 do Passo 1
 - ❌ Criar DataSource/Repository no modo 🅰, ou usar `verify_local_purchase` no modo 🅱
 - ❌ Acessar `InAppPurchaseService` diretamente da View — sempre via Cubit
 - ❌ Usar `SharedPreferences` direto — sempre `StorageService`
@@ -455,4 +634,4 @@ Ao concluir, informe ao usuário o que ele deve testar manualmente:
 
 ---
 
-**Última atualização**: 25 de agosto de 2026
+**Última atualização**: 1 de setembro de 2026
